@@ -299,7 +299,7 @@ static uint8_t BCC()
 
 static uint8_t BCS()
 {
- if(getFlag(CARRY))
+ if(getFlag(CARRY)==1)
  {
   cycles++;
   abs_addr = pc + rel_addr;
@@ -313,7 +313,7 @@ static uint8_t BCS()
 
 static uint8_t BEQ()
 {
- if(getFlag(ZERO))
+ if(getFlag(ZERO)==1)
  {
   cycles++;
   abs_addr = pc + rel_addr;
@@ -322,6 +322,16 @@ static uint8_t BEQ()
 
   return 0;
  }
+ return 0;
+}
+
+static uint8_t BIT()
+{
+ fetch();
+ temp = a & fetched;
+ setFlag(ZERO, temp==0);
+ setFlag(NEGATIVE, (temp&0x80)>>8);
+ setFlag(OVERFLAW, (temp&0x70)>>7);
  return 0;
 }
 
