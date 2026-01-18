@@ -311,6 +311,20 @@ static uint8_t BCS()
  return 0;
 }
 
+static uint8_t BEQ()
+{
+ if(getFlag(ZERO))
+ {
+  cycles++;
+  abs_addr = pc + rel_addr;
+
+  if((abs_addr&0xFF00)!=(pc&0xFF00)) cycles+   +;
+
+  return 0;
+ }
+ return 0;
+}
+
 static uint8_t ORA()
 {
 	fetch();
