@@ -256,6 +256,14 @@ static uint8_t ADC() {
 	return 1;
 }
 
+static uint8_t AND() {
+	fetch();
+	a = a&fetched;
+	setFlag(ZERO, a == 0);
+	setFlag(NEGATIVE, a&0x80);
+	return 1;
+}
+
 static uint8_t ORA()
 {
 	fetch();
