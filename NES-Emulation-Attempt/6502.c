@@ -36,14 +36,14 @@ void initialize_cpu(Bus* bus) {
 }
 
 // flag manipulation functions
-static void setFlag(StatusFlags flag, uint8_t value) {
+static void set_flag(StatusFlags flag, uint8_t value) {
 	if (value)
 		status |= flag;
 	else
 		status &= ~flag;
 }
 
-static uint8_t getFlag(StatusFlags flag) {
+static uint8_t get_flag(StatusFlags flag) {
 	return (status & flag) > 0 ? 1 : 0;
 }
 
@@ -245,11 +245,11 @@ static uint8_t IMP() {
 
 static uint8_t ADC() {
 	fetch();
-	uint16_t temp = (uint16_t)a + (uint16_t)fetched + (uint16_t)getFlag(CARRY);
-	setFlag(CARRY, temp > 0x00FF);
-	setFlag(ZERO, temp&0x00FF == 0);
-	setFlag(NEGATIVE,  temp&0x80);
-	setFlag(OVERFLOW, ((((uint8_t) temp & 0x00FF)^a)&(((uint8_t)temp & 0x00FF)^fetched))&0x80);
+	uint16_t temp = (uint16_t)a + (uint16_t)fetched + (uint16_t)get_flag(CARRY);
+	set_flag(CARRY, temp > 0x00FF);
+	set_flag(ZERO, temp&0x00FF == 0);
+	set_flag(NEGATIVE,  temp&0x80);
+	set_flag(OVERFLOW, ((((uint8_t) temp & 0x00FF)^a)&(((uint8_t)temp & 0x00FF)^fetched))&0x80);
 
 	a = temp & 0x00FF;
 
@@ -259,8 +259,8 @@ static uint8_t ADC() {
 static uint8_t AND() {
 	fetch();
 	a = a&fetched;
-	setFlag(ZERO, a == 0);
-	setFlag(NEGATIVE, a&0x80);
+	set_flag(ZERO, a == 0);
+	set_flag(NEGATIVE, a&0x80);
 	return 1;
 }
 
@@ -268,9 +268,9 @@ static uint8_t ASL()
 {
 	fetch();
 	temp = (uint16_t) fetched << 1;
-	setFlag(ZERO, fetched == 0);
-	setFlag(NEGATIVE, 0x80);
-	setFlag(CARRY, (fetched&0xFF00)>0);
+	set_flag(ZERO, fetched == 0);
+	set_flag(NEGATIVE, 0x80);
+	set_flag(CARRY, fetched&0x40);
 	if (lookup[opcode>>4&0xF][opcode&0xF].addressMode == IMP) {
 		a = temp & 0xFF;
 	}
@@ -283,79 +283,79 @@ static uint8_t ASL()
 static uint8_t BCC()
 {
 
- if(getFlag(CARRY)==0)
- {
-  cycles++;
-  abs_addr = pc + rel_addr;
+	if(get_flag(CARRY)==0)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
   
-  if((abs_addr&0xFF00)!=(pc&0xFF00)) cycles++;
+		if((addr_abs &0xFF00)!=(pc&0xFF00)) cycles++;
   
-  pc = abs_addr;
-  return 0;
- }
+		pc = addr_abs;
+		return 0;
+	}
 
  return 0;
 }
 
 static uint8_t BCS()
 {
- if(getFlag(CARRY)==1)
- {
-  cycles++;
-  abs_addr = pc + rel_addr;
+	if(get_flag(CARRY)==1)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
 
-  if((abs_addr&0xFF00)!=(pc&0xFF00)) cycles+   +;
+		if((addr_abs &0xFF00)!=(pc&0xFF00)) cycles++;
  
-  return 0;
- }
- return 0;
+		return 0;
+	}
+	return 0;
 }
 
 static uint8_t BEQ()
 {
- if(getFlag(ZERO)==1)
- {
-  cycles++;
-  abs_addr = pc + rel_addr;
+	if(get_flag(ZERO)==1)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
 
-  if((abs_addr&0xFF00)!=(pc&0xFF00)) cycles+   +;
+		if((addr_abs &0xFF00)!=(pc&0xFF00)) cycles++;
 
-  return 0;
- }
- return 0;
+		return 0;
+	}
+	return 0;
 }
 
 static uint8_t BIT()
 {
- fetch();
- temp = a & fetched;
- setFlag(ZERO, temp==0);
- setFlag(NEGATIVE, (temp&0x80)>>8);
- setFlag(OVERFLAW, (temp&0x70)>>7);
- return 0;
+	fetch();
+	temp = a & fetched;
+	set_flag(ZERO, temp==0);
+	set_flag(NEGATIVE, (temp&0x80)>>7);
+	set_flag(OVERFLOW, (temp&0x40)>>6);
+	return 0;
 }
 
 static uint8_t ORA()
 {
 	fetch();
 	a |= fetched;
-	setFlag(ZERO, a == 0x00);
-	setFlag(NEGATIVE, a&0x80);
+	set_flag(ZERO, a == 0x00);
+	set_flag(NEGATIVE, a&0x80);
 	return 1;
 }
 
 static uint8_t BRK() {
 	pc++;
-	setFlag(INTERRUPT_DISABLE, 1);
+	set_flag(INTERRUPT_DISABLE, 1);
 	write(0x0100 + sp, (pc >> 8) & 0x00FF);
 	sp--;
 	write(0x0100 + sp, pc & 0x00FF);
 	sp--;
 
-	setFlag(BREAK, 1);
+	set_flag(BREAK, 1);
 	write(0x0100 + sp, status);
 	sp--;
-	setFlag(BREAK, 0);
+	set_flag(BREAK, 0);
 
 	pc = (uint16_t)read(0xFFFE) | ((uint16_t)read(0xFFFF) << 8);
 	return 0;
