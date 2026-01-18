@@ -58,7 +58,7 @@ static void write(uint16_t addr, uint8_t data) {
 typedef struct {
 	char* name;
 	uint8_t(*operate)();
-	uint8_t(*addressMode)();
+	uint8_t(*address_mode)();
 	uint8_t cycles;
 }Instruction;
 
@@ -84,9 +84,10 @@ static uint8_t ROR();	static uint8_t RTI();	static uint8_t RTS();	static uint8_t
 static uint8_t SEC();	static uint8_t SED();	static uint8_t SEI();	static uint8_t STA();
 static uint8_t STX();	static uint8_t STY();	static uint8_t TAX();	static uint8_t TAY();
 static uint8_t TSX();	static uint8_t TXA();	static uint8_t TXS();	static uint8_t TYA();
+static uint8_t XXX();
 
 Instruction lookup[16][16] = {
-	{"BRK",BRK,IMM,7},{"ORA",IZX,IZX,6},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{ "???",XXX,IMP,8},{"ORA",ORA,ZP0,3}
+	{"BRK",&BRK,IMM,7},{"ORA",IZX,IZX,6},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{ "???",XXX,IMP,8},{"ORA",ORA,ZP0,3}
 };
 
 void cpu_6502_clock(){
@@ -97,7 +98,7 @@ void cpu_6502_clock(){
 
 		cycles = lookup[(opcode >> 4) & 0xF][opcode & 0xF].cycles;
 
-		uint8_t additional_cycle1 = lookup[(opcode>>4)&0xF][opcode&0xF].addressMode();
+		uint8_t additional_cycle1 = lookup[(opcode>>4)&0xF][opcode&0xF].address_mode();
 		uint8_t additional_cycle2 = lookup[(opcode >> 4) & 0xF][opcode & 0xF].operate();
 
 		cycles += (additional_cycle1 & additional_cycle2);
@@ -109,7 +110,7 @@ void cpu_6502_clock(){
 
 static uint8_t fetch()
 {
-	if (!(lookup[(opcode >> 4) & 0xF][opcode & 0xF].addressMode == IMP))
+	if (!(lookup[(opcode >> 4) & 0xF][opcode & 0xF].address_mode == IMP))
 		fetched = read(addr_abs);
 	return fetched;
 }
@@ -162,7 +163,7 @@ static uint8_t IZY() {
 	addr_abs = (upper << 8) | lower;
 	addr_abs += y;
 
-	if (addr_abs & 0xFF00 != (upper << 8)) return 1;
+	if ((addr_abs & 0xFF00) != (upper << 8)) return 1;
 
 	return 0;
 }
@@ -209,7 +210,7 @@ static uint8_t ABY()
 	addr_abs = (high << 8) | low;
 	addr_abs += y;
 
-	if (addr_abs & 0xFF00 != (high << 8)) return 1;
+	if ((addr_abs & 0xFF00) != (high << 8)) return 1;
 
 	return 0;
 }
@@ -224,7 +225,7 @@ static uint8_t ABX()
 	addr_abs = (high << 8) | low;
 	addr_abs += x;
 
-	if (addr_abs & 0xFF00 != (high << 8)) return 1;
+	if ((addr_abs & 0xFF00) != (high << 8)) return 1;
 
 	return 0;
 }
@@ -247,8 +248,8 @@ static uint8_t ADC() {
 	fetch();
 	uint16_t temp = (uint16_t)a + (uint16_t)fetched + (uint16_t)get_flag(CARRY);
 	set_flag(CARRY, temp > 0x00FF);
-	set_flag(ZERO, temp&0x00FF == 0);
-	set_flag(NEGATIVE,  temp&0x80);
+	set_flag(ZERO, (temp&0x00FF) == 0);
+	set_flag(NEGATIVE,  (temp&0x80)>>7);
 	set_flag(OVERFLOW, ((((uint8_t) temp & 0x00FF)^a)&(((uint8_t)temp & 0x00FF)^fetched))&0x80);
 
 	a = temp & 0x00FF;
@@ -268,10 +269,10 @@ static uint8_t ASL()
 {
 	fetch();
 	temp = (uint16_t) fetched << 1;
-	set_flag(ZERO, fetched == 0);
-	set_flag(NEGATIVE, 0x80);
-	set_flag(CARRY, fetched&0x40);
-	if (lookup[opcode>>4&0xF][opcode&0xF].addressMode == IMP) {
+	set_flag(ZERO, temp == 0);
+	set_flag(NEGATIVE, (temp&0x80)>>7);
+	set_flag(CARRY, (temp&0x40)>>6);
+	if (lookup[opcode>>4&0xF][opcode&0xF].address_mode == IMP) {
 		a = temp & 0xFF;
 	}
 	else{
@@ -335,6 +336,262 @@ static uint8_t BIT()
 	return 0;
 }
 
+static uint8_t BMI()
+{
+	if (get_flag(NEGATIVE) == 1)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
+
+		if ((addr_abs & 0xFF00) != (pc & 0xFF00)) cycles++;
+
+		return 0;
+	}
+	return 0;
+}
+
+static uint8_t BNE()
+{
+	if (get_flag(ZERO) == 0)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
+
+		if ((addr_abs & 0xFF00) != (pc & 0xFF00)) cycles++;
+
+		return 0;
+	}
+	return 0;
+}
+
+static uint8_t BPL()
+{
+	if (get_flag(NEGATIVE) == 0)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
+
+		if ((addr_abs & 0xFF00) != (pc & 0xFF00)) cycles++;
+
+		return 0;
+	}
+	return 0;
+}
+
+static uint8_t BVC()
+{
+	if (get_flag(OVERFLOW) == 0)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
+
+		if ((addr_abs & 0xFF00) != (pc & 0xFF00)) cycles++;
+
+		return 0;
+	}
+	return 0;
+}
+
+static uint8_t BVS()
+{
+	if (get_flag(OVERFLOW) == 1)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
+
+		if ((addr_abs & 0xFF00) != (pc & 0xFF00)) cycles++;
+
+		return 0;
+	}
+	return 0;
+}
+
+static uint8_t CLC()
+{
+	set_flag(CARRY, 0);
+	return 0;
+}
+
+static uint8_t CLD()
+{
+	set_flag(DECIMAL_MODE, 0);
+	return 0;
+}
+
+static uint8_t CLI()
+{
+	set_flag(INTERRUPT_DISABLE, 0);
+	return 0;
+}
+
+static uint8_t CLV()
+{
+	set_flag(OVERFLOW, 0);
+	return 0;
+}
+
+static uint8_t CMP()
+{
+	fetch();
+	set_flag(CARRY, a > fetched);
+	set_flag(ZERO, a == fetched);
+	set_flag(NEGATIVE, ((a-fetched)&0x80)>>7);
+	return 1;
+}
+
+static uint8_t CPX()
+{
+	fetch();
+	set_flag(CARRY, x > fetched);
+	set_flag(ZERO, x == fetched);
+	set_flag(NEGATIVE, ((x - fetched) & 0x80) >> 7);
+
+	return 0;
+}
+
+static uint8_t CPY()
+{
+	fetch();
+	set_flag(CARRY, y > fetched);
+	set_flag(ZERO, y == fetched);
+	set_flag(NEGATIVE, ((y - fetched) & 0x80) >> 7);
+
+	return 0;
+}
+
+static uint8_t DEC()
+{
+	fetch();
+	temp = fetched - 1;
+	set_flag(ZERO, temp==0);
+	set_flag(NEGATIVE, (temp&0x80)>>7);
+	if (lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP) {
+		a = temp & 0xFF;
+	}
+	else {
+		write(addr_abs, temp & 0xFF);
+	}
+	return 0;
+}
+
+static uint8_t DEX()
+{
+	x--;
+	set_flag(ZERO, x == 0);
+	set_flag(NEGATIVE, (x & 0x80) >> 7);
+	return 0;
+}
+
+static uint8_t DEY()
+{
+	y--;
+	set_flag(ZERO, y == 0);
+	set_flag(NEGATIVE, (y & 0x80) >> 7);
+	return 0;
+}
+
+static uint8_t EOR()
+{
+	fetch();
+	a = fetched ^ a;
+	set_flag(ZERO, a == 0);
+	set_flag(NEGATIVE, (a & 0x80) >> 7);
+	return 1;
+}
+
+static uint8_t INC()
+{
+	fetch();
+	temp = fetched + 1;
+	set_flag(ZERO, temp == 0);
+	set_flag(NEGATIVE, (temp & 0x80) >> 7);
+	if (lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP) {
+		a = temp & 0xFF;
+	}
+	else {
+		write(addr_abs, temp & 0xFF);
+	}
+	return 0;
+}
+
+static uint8_t INX()
+{
+	x++;
+	set_flag(ZERO, x == 0);
+	set_flag(NEGATIVE, (x & 0x80) >> 7);
+	return 0;
+}
+
+static uint8_t INY()
+{
+	y++;
+	set_flag(ZERO, y == 0);
+	set_flag(NEGATIVE, (y & 0x80) >> 7);
+	return 0;
+}
+
+static uint8_t JMP()
+{
+	fetch();
+	pc = fetched;
+	return 0;
+}
+
+static uint8_t JSR()
+{
+	write(0x100+sp, (uint8_t) pc&0xFF);
+	sp--;
+	write(0x100 + sp, (uint8_t) ((pc & 0xFF00)>>8)&0xFF);
+	sp--;
+
+	fetch();
+	pc = fetched;
+	return 0;
+}
+
+static uint8_t LDA()
+{
+	fetch();
+	a = fetched;
+	set_flag(ZERO, a==0);
+	set_flag(NEGATIVE, (a&0x80)>>7);
+	return 1;
+}
+
+static uint8_t LDX()
+{
+	fetch();
+	x = fetched;
+	set_flag(ZERO, x == 0);
+	set_flag(NEGATIVE, (x & 0x80) >> 7);
+	return 1;
+}
+
+static uint8_t LDY()
+{
+	fetch();
+	y = fetched;
+	set_flag(ZERO, y == 0);
+	set_flag(NEGATIVE, (y & 0x80) >> 7);
+	return 1;
+}
+
+static uint8_t LSR()
+{
+	fetch();
+	set_flag(CARRY, fetched & 0x1);
+	temp = fetched >> 1;
+	set_flag(ZERO, temp == 0);
+	set_flag(NEGATIVE, (temp & 0x80) >> 7);
+	if (lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP) {
+		a = temp & 0xFF;
+	}
+	else {
+		write(addr_abs, temp & 0xFF);
+	}
+	return 0;
+}
+
 static uint8_t ORA()
 {
 	fetch();
@@ -342,6 +599,194 @@ static uint8_t ORA()
 	set_flag(ZERO, a == 0x00);
 	set_flag(NEGATIVE, a&0x80);
 	return 1;
+}
+
+static uint8_t PHA()
+{
+	write(0x100+sp, a);
+	sp--;
+	return 0;
+}
+
+static uint8_t PHP()
+{
+	write(0x100 + sp, status|BREAK|UNUSED);
+	set_flag(BREAK, 0);
+	set_flag(UNUSED, 0);
+	sp--;
+	return 0;
+}
+
+static uint8_t PLA()
+{
+	sp++;
+	a = read(0x100+sp);
+	set_flag(ZERO, a == 0x00);
+	set_flag(NEGATIVE, (a & 0x80)>>7);
+	return 0;
+}
+
+static uint8_t PLP()
+{
+	sp++;
+	status = read(0x100 + sp);
+	set_flag(UNUSED, 1);
+	return 0;
+}
+
+uint8_t static ROL()
+{
+	fetch();
+	temp = (uint16_t)(fetched << 1) | get_flag(CARRY);
+	set_flag(CARRY, (fetched&0x80)>>7);
+	set_flag(ZERO,  temp == 0);
+	set_flag(NEGATIVE, (temp & 0x80) >> 7);
+	if (lookup[opcode>>4&0xF][opcode & 0xF].address_mode == IMP)
+		a = temp & 0x00FF;
+	else
+		write(addr_abs, temp & 0x00FF);
+	return 0;
+}
+
+uint8_t static ROR()
+{
+	fetch();
+	temp = (uint16_t)(get_flag(CARRY) << 7) | (fetched>>1);
+	set_flag(CARRY, (fetched & 0x80) >> 7);
+	set_flag(ZERO, temp == 0);
+	set_flag(NEGATIVE, (temp & 0x80)>>7);
+	if (lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP)
+		a = temp & 0x00FF;
+	else
+		write(addr_abs, temp & 0x00FF);
+	return 0;
+}
+
+uint8_t static RTI()
+{
+	sp++;
+	status = read(0x100+sp);
+	sp++;
+
+	set_flag(BREAK, 0);
+	set_flag(UNUSED, 0);
+
+
+	uint8_t low = read(0x100 + sp);
+	sp++;
+	uint8_t high = read(0x100 + sp);
+	pc = (high<<8) | low;
+	return 0;
+}
+
+uint8_t static RTS()
+{
+	sp++;
+	uint8_t low = read(0x100 + sp);
+	sp++;
+	uint8_t high = read(0x100 + sp);
+	pc = (high << 8) | low;
+	pc++;
+	return 0;
+}
+
+uint8_t static SBC()
+{
+	fetch();
+
+	uint16_t value = ((uint16_t)fetched) ^ 0x00FF;
+
+	temp = (uint16_t)a + value + (uint16_t) get_flag(CARRY);
+	set_flag(CARRY, temp & 0xFF00);
+	set_flag(ZERO, (temp & 0xFF) == 0);
+	set_flag(OVERFLOW, ((temp^a)&(temp^~fetched)&0x80)>>7);
+	set_flag(NEGATIVE, (temp & 0x80)>>7);
+	a = temp & 0x00FF;
+	return 1;
+}
+
+uint8_t static SEC()
+{
+	set_flag(CARRY, 1);
+	return 0;
+}
+
+uint8_t static SED()
+{
+	set_flag(DECIMAL_MODE, 1);
+	return 0;
+}
+
+uint8_t static SEI()
+{
+	set_flag(INTERRUPT_DISABLE, 1);
+	return 0;
+}
+
+uint8_t static STA()
+{
+	write(addr_abs,a);
+	return 0;
+}
+
+uint8_t static STX()
+{
+	write(addr_abs, x);
+	return 0;
+}
+
+uint8_t static STY()
+{
+	write(addr_abs, y);
+	return 0;
+}
+
+uint8_t static TAX()
+{
+	x = a;
+	set_flag(ZERO, x == 0);
+	set_flag(NEGATIVE, (x&0x80)>>7);
+	return 0;
+}
+
+uint8_t static TAY()
+{
+	y = a;
+	set_flag(ZERO, y == 0);
+	set_flag(NEGATIVE, (y & 0x80) >> 7);
+	return 0;
+}
+
+uint8_t static TSX()
+{
+	x = sp;
+	set_flag(ZERO, x == 0);
+	set_flag(NEGATIVE, (x & 0x80) >> 7);
+	return 0;
+}
+
+uint8_t static TXA()
+{
+	a = x;
+	set_flag(ZERO, a == 0);
+	set_flag(NEGATIVE, (a & 0x80) >> 7);
+	return 0;
+}
+
+uint8_t static TXS()
+{
+	sp = x;
+	set_flag(ZERO, sp == 0);
+	set_flag(NEGATIVE, (sp & 0x80) >> 7);
+	return 0;
+}
+
+uint8_t static TYA()
+{
+	a = y;
+	set_flag(ZERO, a == 0);
+	set_flag(NEGATIVE, (a & 0x80) >> 7);
+	return 0;
 }
 
 static uint8_t BRK() {
@@ -368,5 +813,15 @@ static uint8_t XXX()
 
 static uint8_t NOP()
 {
+	switch (opcode) {
+	case 0x1C:
+	case 0x3C:
+	case 0x5C:
+	case 0x7C:
+	case 0xDC:
+	case 0xFC:
+		return 1;
+		break;
+	}
 	return 0;
 }
