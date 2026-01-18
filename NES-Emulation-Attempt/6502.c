@@ -264,6 +264,22 @@ static uint8_t AND() {
 	return 1;
 }
 
+static uint8_t ASL()
+{
+	fetch();
+	temp = (uint16_t) fetched << 1;
+	setFlag(ZERO, fetched == 0);
+	setFlag(NEGATIVE, 0x80);
+	setFlag(CARRY, (fetched&0xFF00)>0);
+	if (lookup[opcode>>4&0xF][opcode&0xF].addressMode == IMP) {
+		a = temp & 0xFF;
+	}
+	else{
+		write(addr_abs, temp&0xFF);
+	}
+	return 0;
+}
+
 static uint8_t ORA()
 {
 	fetch();
