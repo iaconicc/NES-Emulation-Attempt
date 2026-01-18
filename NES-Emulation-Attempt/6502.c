@@ -280,6 +280,23 @@ static uint8_t ASL()
 	return 0;
 }
 
+static uint8_t BCC()
+{
+
+ if(getFlag(CARRY)==0)
+ {
+  cycles++;
+  abs_addr = pc + rel_addr;
+  
+  if((abs_addr&0xFF00)!=(pc&0xFF00)) cycles++;
+  
+  pc = abs_addr;
+  return 0;
+ }
+
+ return 0;
+}
+
 static uint8_t ORA()
 {
 	fetch();
