@@ -243,6 +243,19 @@ static uint8_t IMP() {
 	return 0;
 }
 
+static uint8_t ADC() {
+	fetch();
+	uint16_t temp = (uint16_t)a + (uint16_t)fetched + (uint16_t)getFlag(CARRY);
+	setFlag(CARRY, temp > 0x00FF);
+	setFlag(ZERO, temp&0x00FF == 0);
+	setFlag(NEGATIVE,  temp&0x80);
+	setFlag(OVERFLOW, ((((uint8_t) temp & 0x00FF)^a)&(((uint8_t)temp & 0x00FF)^fetched))&0x80);
+
+	a = temp & 0x00FF;
+
+	return 1;
+}
+
 static uint8_t ORA()
 {
 	fetch();
