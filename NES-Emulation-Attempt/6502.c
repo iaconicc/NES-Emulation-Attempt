@@ -87,7 +87,22 @@ static uint8_t TSX();	static uint8_t TXA();	static uint8_t TXS();	static uint8_t
 static uint8_t XXX();
 
 Instruction lookup[16][16] = {
-	{"BRK",&BRK,IMM,7},{"ORA",IZX,IZX,6},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{ "???",XXX,IMP,8},{"ORA",ORA,ZP0,3}
+	{{"BRK",BRK,IMM,7},{"ORA",ORA,IZX,6},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"ORA",ORA,ZP0,3},{"ASL",ASL,ZP0,5},{"???",XXX,IMP,2},{"PHP",PHP,IMP,3},{"ORA",ORA,IMM,2},{"ASL",ASL,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"ORA",ORA,ABS,4},{"ASL",ASL,ABS,6},{"???",XXX,IMP,2}},
+	{{"BPL",BPL,REL,2},{"ORA",ORA,IZY,5},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"ORA",ORA,ZPX,4},{"ASL",ASL,ZPX,6},{"???",XXX,IMP,2},{"CLC",CLC,IMP,2},{"ORA",ORA,ABY,4},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"ORA",ORA,ABX,4},{"ASL",ASL,ABX,7},{"???",XXX,IMP,2}},
+	{{"JSR",JSR,ABS,6},{"AND",AND,IZX,6},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"BIT",BIT,ZP0,3},{"AND",AND,ZP0,3},{"ROL",ROL,ZP0,5},{"???",XXX,IMP,2},{"PLP",PLP,IMP,4},{"AND",AND,IMM,2},{"ROL",ROL,IMP,2},{"???",XXX,IMP,2},{"BIT",BIT,ABS,4},{"AND",AND,ABS,4},{"ROL",ROL,ABS,6},{"???",XXX,IMP,2}},
+	{{"BMI",BMI,REL,2},{"AND",AND,IZY,5},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"AND",AND,ZPX,4},{"ROL",ROL,ZPX,6},{"???",XXX,IMP,2},{"SEC",SEC,IMP,2},{"AND",AND,ABY,4},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"AND",AND,ABX,4},{"ROL",ROL,ABX,7},{"???",XXX,IMP,2}},
+	{{"RTI",RTI,IMP,6},{"EOR",EOR,IZX,6},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"EOR",EOR,ZP0,3},{"LSR",LSR,ZP0,5},{"???",XXX,IMP,2},{"PHA",PHA,IMP,3},{"EOR",EOR,IMM,2},{"LSR",LSR,IMP,2},{"???",XXX,IMP,2},{"JMP",JMP,ABS,3},{"EOR",EOR,ABS,4},{"LSR",LSR,ABS,6},{"???",XXX,IMP,2}},
+	{{"BVC",BVC,REL,2},{"EOR",EOR,IZY,5},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"EOR",EOR,ZPX,4},{"LSR",LSR,ZPX,6},{"???",XXX,IMP,2},{"CLI",CLI,IMP,2},{"EOR",EOR,ABY,4},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"EOR",EOR,ABX,4},{"LSR",LSR,ABX,7},{"???",XXX,IMP,2}},
+	{{"RTS",RTS,IMP,6},{"ADC",ADC,IZX,6},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"ADC",ADC,ZP0,3},{"ROR",ROR,ZP0,5},{"???",XXX,IMP,2},{"PLA",PLA,IMP,4},{"ADC",ADC,IMM,2},{"ROR",ROR,IMP,2},{"???",XXX,IMP,2},{"JMP",JMP,IND,5},{"ADC",ADC,ABS,4},{"ROR",ROR,ABS,6},{"???",XXX,IMP,2}},
+	{{"BVS",BVS,REL,2},{"ADC",ADC,IZY,5},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"ADC",ADC,ZPX,4},{"ROR",ROR,ZPX,6},{"???",XXX,IMP,2},{"SEI",SEI,IMP,2},{"ADC",ADC,ABY,4},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"ADC",ADC,ABX,4},{"ROR",ROR,ABX,7},{"???",XXX,IMP,2}},
+	{{"???",XXX,IMP,2},{"STA",STA,IZX,6},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"STY",STY,ZP0,3},{"STA",STA,ZP0,3},{"STX",STX,ZP0,3},{"???",XXX,IMP,2},{"DEY",DEY,IMP,2},{"???",XXX,IMP,2},{"TXA",TXA,IMP,2},{"???",XXX,IMP,2},{"STY",STY,ABS,4},{"STA",STA,ABS,4},{"STX",STX,ABS,4},{"???",XXX,IMP,2}},
+	{{"BCC",BCC,REL,2},{"STA",STA,IZY,6},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"STY",STY,ZPX,4},{"STA",STA,ZPX,4},{"STX",STX,ZPY,4},{"???",XXX,IMP,2},{"TYA",TYA,IMP,2},{"STA",STA,ABY,5},{"TXS",TXS,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"STA",STA,ABX,5},{"???",XXX,IMP,2},{"???",XXX,IMP,2}},
+	{{"LDY",LDY,IMM,2},{"LDA",LDA,IZX,6},{"LDX",LDX,IMM,2},{"???",XXX,IMP,2},{"LDY",LDY,ZP0,3},{"LDA",LDA,ZP0,3},{"LDX",LDX,ZP0,3},{"???",XXX,IMP,2},{"TAY",TAY,IMP,2},{"LDA",LDA,IMM,2},{"TAX",TAX,IMP,2},{"???",XXX,IMP,2},{"LDY",LDY,ABS,4},{"LDA",LDA,ABS,4},{"LDX",LDX,ABS,4},{"???",XXX,IMP,2}},
+	{{"BCS",BCS,REL,2},{"LDA",LDA,IZY,5},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"LDY",LDY,ZPX,4},{"LDA",LDA,ZPX,4},{"LDX",LDX,ZPY,4},{"???",XXX,IMP,2},{"CLV",CLV,IMP,2},{"LDA",LDA,ABY,4},{"TSX",TSX,IMP,2},{"???",XXX,IMP,2},{"LDY",LDY,ABX,4},{"LDA",LDA,ABX,4},{"LDX",LDX,ABY,4},{"???",XXX,IMP,2}},
+	{{"CPY",CPY,IMM,2},{"CMP",CMP,IZX,6},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"CPY",CPY,ZP0,3},{"CMP",CMP,ZP0,3},{"DEC",DEC,ZP0,5},{"???",XXX,IMP,2},{"INY",INY,IMP,2},{"CMP",CMP,IMM,2},{"DEX",DEX,IMP,2},{"???",XXX,IMP,2},{"CPY",CPY,ABS,4},{"CMP",CMP,ABS,4},{"DEC",DEC,ABS,6},{"???",XXX,IMP,2}},
+	{{"BNE",BNE,REL,2},{"CMP",CMP,IZY,5},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"CMP",CMP,ZPX,4},{"DEC",DEC,ZPX,6},{"???",XXX,IMP,2},{"CLD",CLD,IMP,2},{"CMP",CMP,ABY,4},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"CMP",CMP,ABX,4},{"DEC",DEC,ABX,7},{"???",XXX,IMP,2}},
+	{{"CPX",CPX,IMM,2},{"SBC",SBC,IZX,6},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"CPX",CPX,ZP0,3},{"SBC",SBC,ZP0,3},{"INC",INC,ZP0,5},{"???",XXX,IMP,2},{"INX",INX,IMP,2},{"SBC",SBC,IMM,2},{"NOP",NOP,IMP,2},{"???",XXX,IMP,2},{"CPX",CPX,ABS,4},{"SBC",SBC,ABS,4},{"INC",INC,ABS,6},{"???",XXX,IMP,2}},
+	{{"BEQ",BEQ,REL,2},{"SBC",SBC,IZY,5},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"SBC",SBC,ZPX,4},{"INC",INC,ZPX,6},{"???",XXX,IMP,2},{"SED",SED,IMP,2},{"SBC",SBC,ABY,4},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"???",XXX,IMP,2},{"SBC",SBC,ABX,4},{"INC",INC,ABX,7},{"???",XXX,IMP,2}},
 };
 
 void cpu_6502_clock(){
@@ -96,10 +111,10 @@ void cpu_6502_clock(){
 		opcode = read(pc);
 		pc++;
 
-		cycles = lookup[(opcode >> 4) & 0xF][opcode & 0xF].cycles;
+		cycles = lookup[opcode & 0xF][opcode >> 4 & 0xF].cycles;
 
-		uint8_t additional_cycle1 = lookup[(opcode>>4)&0xF][opcode&0xF].address_mode();
-		uint8_t additional_cycle2 = lookup[(opcode >> 4) & 0xF][opcode & 0xF].operate();
+		uint8_t additional_cycle1 = lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode();
+		uint8_t additional_cycle2 = lookup[opcode & 0xF][opcode >> 4 & 0xF].operate();
 
 		cycles += (additional_cycle1 & additional_cycle2);
 	}
@@ -110,7 +125,7 @@ void cpu_6502_clock(){
 
 static uint8_t fetch()
 {
-	if (!(lookup[(opcode >> 4) & 0xF][opcode & 0xF].address_mode == IMP))
+	if (!(lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode == IMP))
 		fetched = read(addr_abs);
 	return fetched;
 }
@@ -145,8 +160,8 @@ static uint8_t IZX() {
 	uint8_t t = read(pc);
 	pc++;
 
-	uint16_t lower = read(((uint16_t)t + (uint16_t)x & 0xff));
-	uint16_t upper = read(((uint16_t)t + (uint16_t)x + 1 & 0xff));
+	uint16_t lower = read((((uint16_t)t + (uint16_t)x) & 0xff));
+	uint16_t upper = read((((uint16_t)t + (uint16_t)x + 1) & 0xff));
 
 	addr_abs = (upper << 8) | lower;
 
@@ -250,7 +265,7 @@ static uint8_t ADC() {
 	set_flag(CARRY, temp > 0x00FF);
 	set_flag(ZERO, (temp&0x00FF) == 0);
 	set_flag(NEGATIVE,  (temp&0x80)>>7);
-	set_flag(OVERFLOW, ((((uint8_t) temp & 0x00FF)^a)&(((uint8_t)temp & 0x00FF)^fetched))&0x80);
+	set_flag(OVERFLOW, (((((uint8_t) temp & 0x00FF)^a)&(((uint8_t)temp & 0x00FF)^fetched))&0x80)>>7);
 
 	a = temp & 0x00FF;
 
@@ -271,8 +286,8 @@ static uint8_t ASL()
 	temp = (uint16_t) fetched << 1;
 	set_flag(ZERO, temp == 0);
 	set_flag(NEGATIVE, (temp&0x80)>>7);
-	set_flag(CARRY, (temp&0x40)>>6);
-	if (lookup[opcode>>4&0xF][opcode&0xF].address_mode == IMP) {
+	set_flag(CARRY, (fetched&0x80)>>7);
+	if (lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode == IMP) {
 		a = temp & 0xFF;
 	}
 	else{
@@ -307,6 +322,8 @@ static uint8_t BCS()
 
 		if((addr_abs &0xFF00)!=(pc&0xFF00)) cycles++;
  
+		pc = addr_abs;
+
 		return 0;
 	}
 	return 0;
@@ -320,6 +337,8 @@ static uint8_t BEQ()
 		addr_abs = pc + addr_rel;
 
 		if((addr_abs &0xFF00)!=(pc&0xFF00)) cycles++;
+
+		pc = addr_abs;
 
 		return 0;
 	}
@@ -345,6 +364,8 @@ static uint8_t BMI()
 
 		if ((addr_abs & 0xFF00) != (pc & 0xFF00)) cycles++;
 
+		pc = addr_abs;
+
 		return 0;
 	}
 	return 0;
@@ -358,6 +379,8 @@ static uint8_t BNE()
 		addr_abs = pc + addr_rel;
 
 		if ((addr_abs & 0xFF00) != (pc & 0xFF00)) cycles++;
+
+		pc = addr_abs;
 
 		return 0;
 	}
@@ -373,6 +396,8 @@ static uint8_t BPL()
 
 		if ((addr_abs & 0xFF00) != (pc & 0xFF00)) cycles++;
 
+		pc = addr_abs;
+
 		return 0;
 	}
 	return 0;
@@ -387,6 +412,8 @@ static uint8_t BVC()
 
 		if ((addr_abs & 0xFF00) != (pc & 0xFF00)) cycles++;
 
+		pc = addr_abs;
+
 		return 0;
 	}
 	return 0;
@@ -400,6 +427,8 @@ static uint8_t BVS()
 		addr_abs = pc + addr_rel;
 
 		if ((addr_abs & 0xFF00) != (pc & 0xFF00)) cycles++;
+
+		pc = addr_abs;
 
 		return 0;
 	}
@@ -433,7 +462,7 @@ static uint8_t CLV()
 static uint8_t CMP()
 {
 	fetch();
-	set_flag(CARRY, a > fetched);
+	set_flag(CARRY, a >= fetched);
 	set_flag(ZERO, a == fetched);
 	set_flag(NEGATIVE, ((a-fetched)&0x80)>>7);
 	return 1;
@@ -442,7 +471,7 @@ static uint8_t CMP()
 static uint8_t CPX()
 {
 	fetch();
-	set_flag(CARRY, x > fetched);
+	set_flag(CARRY, x >= fetched);
 	set_flag(ZERO, x == fetched);
 	set_flag(NEGATIVE, ((x - fetched) & 0x80) >> 7);
 
@@ -452,7 +481,7 @@ static uint8_t CPX()
 static uint8_t CPY()
 {
 	fetch();
-	set_flag(CARRY, y > fetched);
+	set_flag(CARRY, y >= fetched);
 	set_flag(ZERO, y == fetched);
 	set_flag(NEGATIVE, ((y - fetched) & 0x80) >> 7);
 
@@ -465,7 +494,7 @@ static uint8_t DEC()
 	temp = fetched - 1;
 	set_flag(ZERO, temp==0);
 	set_flag(NEGATIVE, (temp&0x80)>>7);
-	if (lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP) {
+	if (lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode == IMP) {
 		a = temp & 0xFF;
 	}
 	else {
@@ -505,7 +534,7 @@ static uint8_t INC()
 	temp = fetched + 1;
 	set_flag(ZERO, temp == 0);
 	set_flag(NEGATIVE, (temp & 0x80) >> 7);
-	if (lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP) {
+	if (lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode == IMP) {
 		a = temp & 0xFF;
 	}
 	else {
@@ -532,20 +561,18 @@ static uint8_t INY()
 
 static uint8_t JMP()
 {
-	fetch();
-	pc = fetched;
+	pc = addr_abs;
 	return 0;
 }
 
 static uint8_t JSR()
 {
-	write(0x100+sp, (uint8_t) pc&0xFF);
+	write(0x100+sp, (uint8_t) ((pc & 0xFF00) >> 8) & 0xFF);
 	sp--;
-	write(0x100 + sp, (uint8_t) ((pc & 0xFF00)>>8)&0xFF);
+	write(0x100 + sp, (uint8_t)pc & 0xFF);
 	sp--;
 
-	fetch();
-	pc = fetched;
+	pc = addr_abs;
 	return 0;
 }
 
@@ -583,7 +610,7 @@ static uint8_t LSR()
 	temp = fetched >> 1;
 	set_flag(ZERO, temp == 0);
 	set_flag(NEGATIVE, (temp & 0x80) >> 7);
-	if (lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP) {
+	if (lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode == IMP) {
 		a = temp & 0xFF;
 	}
 	else {
@@ -641,7 +668,7 @@ uint8_t static ROL()
 	set_flag(CARRY, (fetched&0x80)>>7);
 	set_flag(ZERO,  temp == 0);
 	set_flag(NEGATIVE, (temp & 0x80) >> 7);
-	if (lookup[opcode>>4&0xF][opcode & 0xF].address_mode == IMP)
+	if (lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode == IMP)
 		a = temp & 0x00FF;
 	else
 		write(addr_abs, temp & 0x00FF);
@@ -652,10 +679,10 @@ uint8_t static ROR()
 {
 	fetch();
 	temp = (uint16_t)(get_flag(CARRY) << 7) | (fetched>>1);
-	set_flag(CARRY, (fetched & 0x80) >> 7);
+	set_flag(CARRY, fetched & 0x1);
 	set_flag(ZERO, temp == 0);
 	set_flag(NEGATIVE, (temp & 0x80)>>7);
-	if (lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP)
+	if (lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode == IMP)
 		a = temp & 0x00FF;
 	else
 		write(addr_abs, temp & 0x00FF);
@@ -813,15 +840,5 @@ static uint8_t XXX()
 
 static uint8_t NOP()
 {
-	switch (opcode) {
-	case 0x1C:
-	case 0x3C:
-	case 0x5C:
-	case 0x7C:
-	case 0xDC:
-	case 0xFC:
-		return 1;
-		break;
-	}
 	return 0;
 }
