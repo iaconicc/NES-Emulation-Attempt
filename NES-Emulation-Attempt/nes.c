@@ -1,5 +1,6 @@
 #include "nes.h"
 #include "deviceRegistry.h"
+#include "6502.h"
 #include "logger.h"
 #include <stdint.h>
 
@@ -17,8 +18,15 @@ int initialise_nes()
 	}
 
 	if(lock_device_registry(cpu_bus) == -1) return -1;
+	initialize_6502_cpu(cpu_bus);
 
 	return 0;
+}
+
+void reset_nes()
+{
+	reset_6502_cpu();
+	SystemCounter = 0;
 }
 
 void deinitalise_nes()
@@ -27,5 +35,6 @@ void deinitalise_nes()
 }
 
 void nes_clock(){
-
+	cpu_6502_clock();
+	SystemCounter++;
 }

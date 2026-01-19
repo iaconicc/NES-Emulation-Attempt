@@ -1,6 +1,6 @@
 #include "app.h"
 
-bool running = true;
+volatile bool running = true;
 
 void set_quit(){
 	running = false;

@@ -31,9 +31,10 @@ typedef enum {
 	NEGATIVE = (1 << 7)
 } StatusFlags;
 
-void initialize_cpu(Bus* bus) {
+void initialize_6502_cpu(Bus* bus) {
 	cpu_bus = bus;
 }
+
 
 // flag manipulation functions
 static void set_flag(StatusFlags flag, uint8_t value) {
@@ -53,6 +54,25 @@ static uint8_t read(uint16_t addr) {
 
 static void write(uint16_t addr, uint8_t data) {
 	write_bus_at_address(cpu_bus, addr, data);
+}
+
+void reset_6502_cpu()
+{
+	pc = (read(0xFFFD) << 8) | read(0xFFFC);
+	set_flag(INTERRUPT_DISABLE, 1);
+
+	a = 0;
+	x = 0;
+	y = 0;
+	sp = 0xFD;
+
+	addr_rel = 0x0000;
+	addr_abs = 0x0000;
+	fetched = 0x00;
+	opcode = 0x00;
+	temp = 0x00;
+
+	cycles = 8;
 }
 
 typedef struct {
@@ -113,8 +133,8 @@ void cpu_6502_clock(){
 
 		cycles = lookup[opcode & 0xF][opcode >> 4 & 0xF].cycles;
 
-		uint8_t additional_cycle1 = lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode();
-		uint8_t additional_cycle2 = lookup[opcode & 0xF][opcode >> 4 & 0xF].operate();
+		uint8_t additional_cycle1 = lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode();
+		uint8_t additional_cycle2 = lookup[opcode >> 4 & 0xF][opcode & 0xF].operate();
 
 		cycles += (additional_cycle1 & additional_cycle2);
 	}
@@ -125,7 +145,7 @@ void cpu_6502_clock(){
 
 static uint8_t fetch()
 {
-	if (!(lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode == IMP))
+	if (!(lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP))
 		fetched = read(addr_abs);
 	return fetched;
 }
@@ -287,7 +307,7 @@ static uint8_t ASL()
 	set_flag(ZERO, temp == 0);
 	set_flag(NEGATIVE, (temp&0x80)>>7);
 	set_flag(CARRY, (fetched&0x80)>>7);
-	if (lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode == IMP) {
+	if (lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP) {
 		a = temp & 0xFF;
 	}
 	else{
@@ -494,7 +514,7 @@ static uint8_t DEC()
 	temp = fetched - 1;
 	set_flag(ZERO, temp==0);
 	set_flag(NEGATIVE, (temp&0x80)>>7);
-	if (lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode == IMP) {
+	if (lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP) {
 		a = temp & 0xFF;
 	}
 	else {
@@ -534,7 +554,7 @@ static uint8_t INC()
 	temp = fetched + 1;
 	set_flag(ZERO, temp == 0);
 	set_flag(NEGATIVE, (temp & 0x80) >> 7);
-	if (lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode == IMP) {
+	if (lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP) {
 		a = temp & 0xFF;
 	}
 	else {
@@ -610,7 +630,7 @@ static uint8_t LSR()
 	temp = fetched >> 1;
 	set_flag(ZERO, temp == 0);
 	set_flag(NEGATIVE, (temp & 0x80) >> 7);
-	if (lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode == IMP) {
+	if (lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP) {
 		a = temp & 0xFF;
 	}
 	else {
@@ -668,7 +688,7 @@ uint8_t static ROL()
 	set_flag(CARRY, (fetched&0x80)>>7);
 	set_flag(ZERO,  temp == 0);
 	set_flag(NEGATIVE, (temp & 0x80) >> 7);
-	if (lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode == IMP)
+	if (lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP)
 		a = temp & 0x00FF;
 	else
 		write(addr_abs, temp & 0x00FF);
@@ -682,7 +702,7 @@ uint8_t static ROR()
 	set_flag(CARRY, fetched & 0x1);
 	set_flag(ZERO, temp == 0);
 	set_flag(NEGATIVE, (temp & 0x80)>>7);
-	if (lookup[opcode & 0xF][opcode >> 4 & 0xF].address_mode == IMP)
+	if (lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP)
 		a = temp & 0x00FF;
 	else
 		write(addr_abs, temp & 0x00FF);

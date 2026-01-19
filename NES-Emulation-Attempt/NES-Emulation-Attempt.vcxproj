@@ -126,6 +126,7 @@
     <ClCompile Include="6502.c" />
     <ClCompile Include="app.c" />
     <ClCompile Include="bus.c" />
+    <ClCompile Include="cartridge.c" />
     <ClCompile Include="deviceRegistry.c" />
     <ClCompile Include="logger.c" />
     <ClCompile Include="main.c" />
@@ -136,6 +137,7 @@
     <ClInclude Include="6502.h" />
     <ClInclude Include="app.h" />
     <ClInclude Include="bus.h" />
+    <ClInclude Include="cartridge.h" />
     <ClInclude Include="deviceRegistry.h" />
     <ClInclude Include="logger.h" />
     <ClInclude Include="nes.h" />
