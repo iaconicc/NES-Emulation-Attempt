@@ -1,4 +1,6 @@
 #include "6502.h"
+#include "logger.h"
+#include <stdio.h>
 #include <stdint.h>
 
 Bus* cpu_bus = NULL;
@@ -73,6 +75,8 @@ void reset_6502_cpu()
 	temp = 0x00;
 
 	cycles = 8;
+
+	log_info("resetted to address 0x%04X", pc);
 }
 
 typedef struct {
@@ -141,6 +145,11 @@ void cpu_6502_clock(){
 
 	clock_count++;
 	cycles--;
+}
+
+int get_cycles()
+{
+	return cycles;
 }
 
 static uint8_t fetch()
@@ -861,4 +870,85 @@ static uint8_t XXX()
 static uint8_t NOP()
 {
 	return 0;
+}
+
+static Debug_instructions g_dbg[24];
+
+Debug_instructions* reset_debug_instructions()
+{
+	uint16_t cursor_pc = pc; // start from current CPU PC
+
+	for (int i = 0; i < 24; i++)
+	{
+		Debug_instructions* di = &g_dbg[i];
+
+		uint8_t op = read(cursor_pc);
+
+		di->address = cursor_pc;
+		di->bytes[0] = op;
+		di->bytes[1] = 0;
+		di->bytes[2] = 0;
+		di->numberOfBytes = 1;
+
+		Instruction inst = lookup[(op >> 4) & 0xF][op & 0xF];
+
+		if (inst.address_mode == IMP)
+		{
+			swprintf(di->mneumonics, 128, L"%hs", inst.name);
+			di->numberOfBytes = 1;
+		}
+		else if (inst.address_mode == IMM)
+		{
+			uint8_t imm = read((uint16_t)(cursor_pc + 1));
+			di->bytes[1] = imm;
+			di->numberOfBytes = 2;
+
+			// Example formatting: "LDA #$10"
+			swprintf(di->mneumonics, 128, L"%hs #$%02X", inst.name, imm);
+		}
+		else if (inst.address_mode == ZP0)
+		{
+			uint8_t zp = read((uint16_t)(cursor_pc + 1));
+			di->bytes[1] = zp;
+			di->numberOfBytes = 2;
+
+			swprintf(di->mneumonics, 128, L"%hs $%02X", inst.name, zp);
+		}
+		else if (inst.address_mode == ABS)
+		{
+			uint8_t lo = read((uint16_t)(cursor_pc + 1));
+			uint8_t hi = read((uint16_t)(cursor_pc + 2));
+			uint16_t addr = (uint16_t)(lo | (hi << 8));
+
+			di->bytes[1] = lo;
+			di->bytes[2] = hi;
+			di->numberOfBytes = 3;
+
+			swprintf(di->mneumonics, 128, L"%hs $%04X", inst.name, addr);
+		}
+		else
+		{
+			// Fallback: at least show mnemonic
+			swprintf(di->mneumonics, 128, L"%hs", inst.name);
+			di->numberOfBytes = 1;
+		}
+
+		cursor_pc = (uint16_t)(cursor_pc + di->numberOfBytes);
+	}
+
+
+	return g_dbg;
+}
+
+Debug_instructions* get_debug_instructions()
+{
+	return g_dbg;
+}
+
+Cpu6502_Regs cpu6502_get_regs(void)
+{
+	Cpu6502_Regs r;
+	r.pc = pc;
+	r.a = a; r.x = x; r.y = y; r.sp = sp; r.status = status;
+	return r;
 }

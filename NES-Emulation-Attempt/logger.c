@@ -27,7 +27,6 @@ static BOOL WINAPI console_ctrl_handler(DWORD ctrl_type)
 	case CTRL_LOGOFF_EVENT:
 	case CTRL_SHUTDOWN_EVENT:
 		set_quit();
-
 		return TRUE;
 	default:
 		return FALSE;

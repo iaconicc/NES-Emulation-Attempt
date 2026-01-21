@@ -26,6 +26,7 @@ int initialise_nes()
 void reset_nes()
 {
 	reset_6502_cpu();
+	while (get_cycles() != 0) nes_clock();
 	SystemCounter = 0;
 }
 

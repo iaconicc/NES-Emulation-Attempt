@@ -25,3 +25,8 @@ Bus_device* get_ram_device()
 {
 	return &ram_device;
 }
+
+uint8_t* get_ram_buffer()
+{
+	return ram;
+}

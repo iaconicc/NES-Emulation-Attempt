@@ -132,6 +132,7 @@
     <ClCompile Include="main.c" />
     <ClCompile Include="nes.c" />
     <ClCompile Include="ram.c" />
+    <ClCompile Include="window.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="6502.h" />
@@ -142,6 +143,7 @@
     <ClInclude Include="logger.h" />
     <ClInclude Include="nes.h" />
     <ClInclude Include="ram.h" />
+    <ClInclude Include="window.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
