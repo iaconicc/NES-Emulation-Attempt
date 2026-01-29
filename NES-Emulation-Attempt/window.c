@@ -7,6 +7,9 @@
 #include "nes.h"
 #include "ram.h"
 #include "6502.h"
+#include "cartridge.h"
+#include "Graphics.h"
+#include "ppu.h"
 
 #pragma comment(lib, "comctl32.lib")
 
@@ -15,9 +18,12 @@ HINSTANCE hInst = NULL;
 /*###########global wnd handles###############*/
 
 static HWND  g_hwndMain = NULL;
-static HWND  g_btnRun = NULL, g_btnStep = NULL, g_btnStepN = NULL, g_btnRefresh = NULL;
+static HWND  g_hwndDxWnd = NULL;
+static HWND  g_btnRun = NULL, g_btnStep = NULL,  g_btnRefresh = NULL;
 static HWND  g_lvRegs = NULL, g_lvDisasm = NULL, g_lvMem = NULL;
 static HWND  g_status = NULL;
+
+HMENU g_hview;
 
 static HFONT g_fontMono = NULL;
 static HFONT g_fontUI = NULL;
@@ -27,11 +33,17 @@ static HFONT g_fontUI = NULL;
 #define ID_FILE_OPEN     40001
 #define ID_FILE_EXIT     40002
 
+#define ID_RESET                40003
+
+#define ID_RAM                40004
+#define ID_NAMETABLE0         40005
+#define ID_NAMETABLE1         40006
+#define ID_NAMETABLE2         40007
+#define ID_NAMETABLE3         40008
+
 #define ID_BTN_RUN       41001
 #define ID_BTN_STEP      41002
-#define ID_BTN_STEPN     41003
 #define ID_BTN_REFRESH   41004
-#define ID_BTN_BREAK     41005
 
 #define ID_LV_REGS       42001
 #define ID_LV_DISASM     42002
@@ -78,6 +90,19 @@ static void set_font_recursive(HWND h, HFONT f)
     SendMessageW(h, WM_SETFONT, (WPARAM)f, TRUE);
 }
 
+static BOOL open_rom_dialog(HWND owner, wchar_t* outPath, DWORD cap)
+{
+    OPENFILENAMEW ofn = { 0 };
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = owner;
+    ofn.lpstrFilter = L"NES ROM (*.nes)\0*.nes\0All Files\0*.*\0";
+    ofn.lpstrFile = outPath;
+    ofn.nMaxFile = cap;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+    outPath[0] = L'\0';
+    return GetOpenFileNameW(&ofn);
+}
+
 static int clampi(int v, int lo, int hi) { return (v < lo) ? lo : (v > hi) ? hi : v; }
 
 static void layout_controls(HWND hwnd)
@@ -109,8 +134,7 @@ static void layout_controls(HWND hwnd)
     // Buttons
     if (g_btnRun)     MoveWindow(g_btnRun, x + (btnW + gap) * 0, y, btnW, btnH, TRUE);
     if (g_btnStep)    MoveWindow(g_btnStep, x + (btnW + gap) * 1, y, btnW, btnH, TRUE);
-    if (g_btnStepN)   MoveWindow(g_btnStepN, x + (btnW + gap) * 2, y, btnW, btnH, TRUE);
-    if (g_btnRefresh) MoveWindow(g_btnRefresh, x + (btnW + gap) * 3, y, btnW, btnH, TRUE);
+    if (g_btnRefresh) MoveWindow(g_btnRefresh, x + (btnW + gap) * 2, y, btnW, btnH, TRUE);
 
     y += btnH + gap;
 
@@ -261,6 +285,10 @@ static void lv_populate_disassembly(void)
             break;
         }
         lv_set_cell(g_lvDisasm, i, 1, temp1);
+
+        wchar_t temp2[8];
+        swprintf(temp2, 32, L"%04X", di_list[i].address);
+        lv_set_cell(g_lvDisasm, i, 0, temp2);
     }
 
     // Advance expected PC based on the *highlighted* instruction
@@ -273,8 +301,8 @@ static void lv_populate_disassembly(void)
 #define REG_COUNT 6
 
 static uint32_t prev_regs[REG_COUNT] = { 0 };
-static BOOL     reg_changed[REG_COUNT] = { 0 };
-static BOOL     regs_first = TRUE;
+static BOOL reg_changed[REG_COUNT] = { 0 };
+static BOOL regs_first = TRUE;
 
 static void lv_populate_registers() 
 {
@@ -358,10 +386,6 @@ static void create_controls(HWND hwnd)
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
         0, 0, 10, 10, hwnd, (HMENU)ID_BTN_STEP, NULL, NULL);
 
-    g_btnStepN = CreateWindowExW(0, L"BUTTON", L"Step N",
-        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        0, 0, 10, 10, hwnd, (HMENU)ID_BTN_STEPN, NULL, NULL);
-
     g_btnRefresh = CreateWindowExW(0, L"BUTTON", L"Refresh",
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
         0, 0, 10, 10, hwnd, (HMENU)ID_BTN_REFRESH, NULL, NULL);
@@ -402,7 +426,6 @@ static void create_controls(HWND hwnd)
 
     set_font_recursive(g_btnRun, g_fontUI);
     set_font_recursive(g_btnStep, g_fontUI);
-    set_font_recursive(g_btnStepN, g_fontUI);
     set_font_recursive(g_btnRefresh, g_fontUI);
 
     // Configure listviews
@@ -463,6 +486,41 @@ static void create_controls(HWND hwnd)
     SendMessageW(g_status, SB_SETTEXTW, 2, (LPARAM)L"");
 }
 
+static void on_open_rom(HWND hwnd)
+{
+    wchar_t path[MAX_PATH];
+    if (!open_rom_dialog(hwnd, path, MAX_PATH)) return;
+
+    char file[MAX_PATH];
+    wcstombs_s(NULL, file, sizeof(file), path, sizeof(path));
+
+    remove_cartridge();
+    insert_cartridge(file);
+    reset_nes();
+
+    refresh_view();
+}
+
+static void clearChecks()
+{
+    CheckMenuItem(g_hview, ID_RAM, MF_BYCOMMAND | MF_UNCHECKED);
+    CheckMenuItem(g_hview, ID_NAMETABLE0, MF_BYCOMMAND | MF_UNCHECKED);
+    CheckMenuItem(g_hview, ID_NAMETABLE1, MF_BYCOMMAND | MF_UNCHECKED);
+    CheckMenuItem(g_hview, ID_NAMETABLE2, MF_BYCOMMAND | MF_UNCHECKED);
+    CheckMenuItem(g_hview, ID_NAMETABLE3, MF_BYCOMMAND | MF_UNCHECKED);
+}
+
+typedef enum {
+    RAM = ID_RAM,
+    Nametable0 = ID_NAMETABLE0,
+    Nametable1 = ID_NAMETABLE1,
+    Nametable2 = ID_NAMETABLE2,
+    Nametable3 = ID_NAMETABLE3,
+}Memory_view_type;
+
+Memory_view_type memory_view_type;
+
+bool CtrlPressed = false;
 static LRESULT nes_dbg_proc(HANDLE hwnd,UINT msg,WPARAM wparam, LPARAM lparam)
 {
     switch (msg)
@@ -500,28 +558,60 @@ static LRESULT nes_dbg_proc(HANDLE hwnd,UINT msg,WPARAM wparam, LPARAM lparam)
     {
         switch (LOWORD(wparam))
         {
-        case ID_FILE_OPEN: break;
+        case ID_RESET: reset_nes(); refresh_view(); break;
+        case ID_FILE_OPEN: on_open_rom(hwnd); break;
         case ID_FILE_EXIT: DestroyWindow(hwnd); break;
 
-        case ID_BTN_RUN:    break;
-        case ID_BTN_STEP: 
+        case ID_BTN_RUN:
         {
-            nes_clock();
-            while(get_cycles() != 0) nes_clock();
-            refresh_view();
+            if (!is_emulator_running())
+            {
+                SetWindowTextW(g_btnRun, L"Stop [C]");
+                SendMessageW(g_status, SB_SETTEXTW, 0, (LPARAM)L"Running");
+                set_emulator_running(true);
+            }else if(is_emulator_running()) {
+                SetWindowTextW(g_btnRun, L"Continue [C]");
+                SendMessageW(g_status, SB_SETTEXTW, 0, (LPARAM)L"Stopped");
+                set_emulator_running(false);
+                refresh_view();
+            }
             break;
         }
-        case ID_BTN_STEPN: break;
+        case ID_BTN_STEP: 
+        {
+            if (!is_emulator_running())
+            {
+                wait_till_cpu_cycle();
+                nes_clock();
+                while (get_cycles() != 0) nes_clock();
+                refresh_view();
+            }
+            break;
+        }
         case ID_BTN_REFRESH: refresh_view(); break;
-        case ID_BTN_BREAK: break;
+        case ID_RAM:
+        case ID_NAMETABLE0:
+        case ID_NAMETABLE1:
+        case ID_NAMETABLE2:
+        case ID_NAMETABLE3:
+        {
+            clearChecks();
+            CheckMenuItem(g_hview, LOWORD(wparam), MF_BYCOMMAND | MF_CHECKED);
+            memory_view_type = LOWORD(wparam);
+            break;
+        }
         }
         break;
     }
+    case WM_SIZE:
+        layout_controls(hwnd);
+        break;
     case WM_CLOSE:
         PostQuitMessage(1);
         break;
     case WM_DESTROY:
         PostQuitMessage(1);
+        delete_graphics();
         if (g_fontMono) DeleteObject(g_fontMono);
         if (g_fontUI)   DeleteObject(g_fontUI);
         break;
@@ -531,17 +621,77 @@ static LRESULT nes_dbg_proc(HANDLE hwnd,UINT msg,WPARAM wparam, LPARAM lparam)
     return DefWindowProcW(hwnd, msg, wparam, lparam);
 }
 
+HACCEL hAccel;
 static HMENU create_menu_bar(void)
 {
     HMENU hMenuBar = CreateMenu();
     HMENU hFile = CreatePopupMenu();
+    HMENU hEmulation = CreatePopupMenu();
+    g_hview = CreatePopupMenu();
 
     AppendMenu(hFile, MF_STRING, ID_FILE_OPEN, L"&Open ROM...\tCtrl+O");
     AppendMenu(hFile, MF_SEPARATOR, 0, NULL);
-    AppendMenu(hFile, MF_STRING, ID_FILE_EXIT, L"E&xit");
+    AppendMenu(hFile, MF_STRING, ID_FILE_EXIT, L"E&xit\tAlt+F4");
+
+    AppendMenu(hEmulation, MF_STRING, ID_RESET, L"&Reset Emulation\tCtrl+1");
+
+    AppendMenu(g_hview, MF_STRING, ID_RAM, L"&Ram");
+    AppendMenu(g_hview, MF_STRING, ID_NAMETABLE0, L"&Nametable0");
+    AppendMenu(g_hview, MF_STRING, ID_NAMETABLE1, L"&Nametable1");
+    AppendMenu(g_hview, MF_STRING, ID_NAMETABLE2, L"&Nametable2");
+    AppendMenu(g_hview, MF_STRING, ID_NAMETABLE3, L"&Nametable3");
+
+    memory_view_type = RAM;
+    CheckMenuItem(g_hview, ID_RAM, MF_BYCOMMAND | MF_CHECKED);
 
     AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hFile, L"&File");
+    AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hEmulation, L"&Emulation");
+    AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)g_hview, L"&View");
+    
+    ACCEL accels[] = {
+        { FCONTROL | FVIRTKEY, '0', ID_FILE_OPEN },
+        { FCONTROL | FVIRTKEY, '1', ID_RESET },
+    };
+    hAccel = CreateAcceleratorTableW(accels, ARRAYSIZE(accels));
+
     return hMenuBar;
+}
+
+static LRESULT nes_proc(HANDLE hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+    switch (msg)
+    {
+    case WM_CREATE:
+    {
+        if (create_graphics_for_window(hwnd) == -1)
+        {
+            PostQuitMessage(-1);
+        }
+        break;
+    }
+    case WM_DESTROY:
+        delete_graphics();
+        PostQuitMessage(1);
+        break;
+    case WM_CLOSE:
+        PostQuitMessage(1);
+        break;
+    default:
+        break;
+    }
+    return DefWindowProcW(hwnd, msg, wparam, lparam);
+}
+
+static LARGE_INTEGER fps_freq;
+static LARGE_INTEGER fps_last;
+static int fps_frames = 0;
+static float fps_value = 0.0f;
+static double last_present_time = 0.0;
+
+static void fps_init()
+{
+    QueryPerformanceFrequency(&fps_freq);
+    QueryPerformanceCounter(&fps_last);
 }
 
 bool create_windows()
@@ -554,7 +704,7 @@ bool create_windows()
 
     hInst = GetModuleHandle(NULL);
 
-    WNDCLASSA wc = { 0 };
+    WNDCLASSW wc = { 0 };
     wc.lpfnWndProc = nes_dbg_proc;
     wc.hInstance = hInst;
     wc.lpszClassName = L"NesDbgWnd";
@@ -576,24 +726,114 @@ bool create_windows()
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
 
-    //TO-DO directX window
+    //directX window
+    ZeroMemory(&wc, sizeof(wc));
+    wc.lpfnWndProc = nes_proc;
+    wc.hInstance = hInst;
+    wc.lpszClassName = L"NesWnd";
+    wc.style = CS_OWNDC;
+
+    RegisterClassW(&wc);
+
+    RECT wr = { 0 };
+    wr.left = 100;
+    wr.right = 640 + wr.left;
+    wr.top = 100;
+    wr.bottom = 480 + wr.top;
+    AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW & ~WS_SIZEBOX & ~WS_MAXIMIZEBOX, NULL);
+
+    hwnd = CreateWindowEx(
+        0, wc.lpszClassName, L"NES Emulator",
+        WS_OVERLAPPEDWINDOW & ~WS_SIZEBOX & ~WS_MAXIMIZEBOX,
+        CW_USEDEFAULT, CW_USEDEFAULT, wr.right-wr.left, wr.bottom-wr.top,
+        NULL, NULL, hInst, NULL);
+    
+    g_hwndDxWnd = hwnd;
+
+    ShowWindow(hwnd, SW_SHOW);
+    UpdateWindow(hwnd);
+
+    fps_init();
 
 	return true;
 }
 
+static void fps_on_frame()
+{
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+
+    fps_frames++;
+
+    double elapsed =
+        (double)(now.QuadPart - fps_last.QuadPart) /
+        (double)fps_freq.QuadPart;
+
+    if (elapsed >= 1.0)
+    {
+        fps_value = (float)(fps_frames / elapsed);
+        fps_frames = 0;
+        fps_last = now;
+    }
+}
+
+double now_seconds()
+{
+    static LARGE_INTEGER freq;
+    static int init = 0;
+
+    if (!init)
+    {
+        QueryPerformanceFrequency(&freq);
+        init = 1;
+    }
+
+    LARGE_INTEGER t;
+    QueryPerformanceCounter(&t);
+    return (double)t.QuadPart / (double)freq.QuadPart;
+}
+
+#define TARGET_FPS 60.0
+#define FRAME_TIME (1.0 / TARGET_FPS)
 int updateWindows()
 {
     MSG msg;
-    while (PeekMessage(&msg, NULL, 0,0, PM_REMOVE))
+    while (PeekMessageW(&msg, NULL, 0,0, PM_REMOVE))
     {
         if (msg.message == WM_QUIT)
         {
             return msg.wParam;
         }
 
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        if (!TranslateAcceleratorW(g_hwndMain, hAccel, &msg))
+        {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
     }
 
+    if (!is_emulator_running())
+    {
+        update_window_graphics();
+    }
+    else if(is_emulator_running()){
+        if (is_frame_complete())
+        {
+            double now = now_seconds();
+            double elapsed = now - last_present_time;
+
+            if (elapsed >= FRAME_TIME)
+            {
+                update_window_graphics();
+                fps_on_frame();
+                last_present_time = now;
+                wchar_t title[128];
+                swprintf(title, 128, L"NES Emulator - %.2f FPS", fps_value);
+                SetWindowTextW(g_hwndDxWnd, title);
+            }
+
+            reset_frame_complete();
+        }
+    }
     return 0;
 }

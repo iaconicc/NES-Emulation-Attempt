@@ -1,5 +1,6 @@
 #include "app.h"
 #include "nes.h"
+#include "ppu.h"
 #include "cartridge.h"
 #include "window.h"
 #include "logger.h"
@@ -37,17 +38,22 @@ void deinitialise_app()
 
 static void run_frame()
 {
-
+	if (is_emulator_running())
+	{
+		while (!is_frame_complete())
+		{
+			nes_clock();
+		}
+	}
 }
 
 int run()
 {
+	run_frame();
 	int ecode = 0;
 	if ((ecode = updateWindows()) != 0) {
 		running = false;
-		return ;
 	}
-	run_frame();
 }
 
 bool is_running(){

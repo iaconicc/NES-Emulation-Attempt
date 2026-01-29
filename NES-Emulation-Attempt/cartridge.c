@@ -5,11 +5,14 @@
 #include <malloc.h>
 
 int mapperId = 0;
+
 uint8_t prg_banks = 0;
 uint8_t chr_banks = 0;
 
 uint8_t* prg_rom = NULL;
 uint8_t* chr_rom = NULL;
+
+Nt_mirroring_mode nametable_mirroring = VERTICAL;
 
 static bool mapper_0_cpu_map(uint16_t* addr);
 
@@ -33,8 +36,16 @@ static uint8_t read(uint16_t addr)
 		}
 	}
 	else{
-		//ppu: unimplemented
-		return 0xFF;
+		//ppu cartridge read
+		switch (mapperId)
+		{
+		case 0:
+			//no need to remap the address as it starts from 0x0000
+			addr &= 0x1FFF;
+			return chr_rom[addr];
+		default:
+			log_critical("the mapper %d is unimplemented cartridge read is not possible defaulting to 0xFF", mapperId);
+		}
 	}
 }
 
@@ -73,6 +84,15 @@ Bus_device cartridge_device =
 	.write = NULL,
 };
 
+Bus_device ppu_cartridge_device =
+{
+	.name = "Cartrigde",
+	.start_range = 0x0000,
+	.end_range = 0x1FFF,
+	.read = read,
+	.write = NULL,
+};
+
 int insert_cartridge(const char* file)
 {
 	FILE* nes_file = fopen(file, "rb");
@@ -97,6 +117,7 @@ int insert_cartridge(const char* file)
 	fread(&header, sizeof(header), 1, nes_file);
 
 	mapperId = header.flag7&0xF0 | (header.flag6 & 0xFF)>>4;
+	nametable_mirroring = (header.flag6 & 0x01 ? VERTICAL : HORISONTAL);
 	prg_rom = malloc(header.prgBanks*16384);
 	if (!prg_rom) return -1;
 
@@ -138,7 +159,17 @@ void remove_cartridge()
 	}
 }
 
+Nt_mirroring_mode current_mirroring_mode()
+{
+	return nametable_mirroring;
+}
+
 Bus_device* get_cartridge_device()
 {
 	return &cartridge_device;
+}
+
+Bus_device* get_ppu_cartridge_device()
+{
+	return &ppu_cartridge_device;
 }

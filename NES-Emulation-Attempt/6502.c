@@ -131,20 +131,17 @@ Instruction lookup[16][16] = {
 
 void cpu_6502_clock(){
 	
-	if (cycles == 0) {
-		opcode = read(pc);
-		pc++;
+	opcode = read(pc);
+	pc++;
 
-		cycles = lookup[opcode & 0xF][opcode >> 4 & 0xF].cycles;
+	cycles = lookup[opcode & 0xF][opcode >> 4 & 0xF].cycles;
 
-		uint8_t additional_cycle1 = lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode();
-		uint8_t additional_cycle2 = lookup[opcode >> 4 & 0xF][opcode & 0xF].operate();
+	uint8_t additional_cycle1 = lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode();
+	uint8_t additional_cycle2 = lookup[opcode >> 4 & 0xF][opcode & 0xF].operate();
 
-		cycles += (additional_cycle1 & additional_cycle2);
-	}
+	cycles += (additional_cycle1 & additional_cycle2);
 
 	clock_count++;
-	cycles--;
 }
 
 int get_cycles()
@@ -152,11 +149,37 @@ int get_cycles()
 	return cycles;
 }
 
+void set_cycles(int cycle)
+{
+	cycles = cycle;
+}
+
 static uint8_t fetch()
 {
 	if (!(lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode == IMP))
 		fetched = read(addr_abs);
 	return fetched;
+}
+
+void nmi()
+{
+	write(0x0100 + sp, (pc >> 8) & 0x00FF);
+	sp--;
+	write(0x0100 + sp, pc & 0x00FF);
+	sp--;
+
+	set_flag(BREAK, 0);
+	set_flag(UNUSED, 1);
+	set_flag(INTERRUPT_DISABLE, 1);
+	write(0x0100 + sp, status);
+	sp--;
+
+	addr_abs = 0xFFFA;
+	uint16_t lo = read(addr_abs + 0);
+	uint16_t hi = read(addr_abs + 1);
+	pc = (hi << 8) | lo;
+
+	cycles = 8;
 }
 
 static uint8_t IMM() {
@@ -925,6 +948,71 @@ Debug_instructions* reset_debug_instructions()
 			di->numberOfBytes = 3;
 
 			swprintf(di->mneumonics, 128, L"%hs $%04X", inst.name, addr);
+		}else if (inst.address_mode == REL){
+			int8_t rel = (int8_t) read((uint16_t)(cursor_pc + 1));
+
+			di->bytes[1] = rel;
+			di->numberOfBytes = 2;
+
+			swprintf(di->mneumonics, 128, L"%hs %d", inst.name, rel);
+		} else if (inst.address_mode == ABY) {
+			uint8_t lo = read((uint16_t)(cursor_pc + 1));
+			uint8_t hi = read((uint16_t)(cursor_pc + 2));
+			uint16_t addr = (uint16_t)(lo | (hi << 8));
+
+			di->bytes[1] = lo;
+			di->bytes[2] = hi;
+			di->numberOfBytes = 3;
+
+			swprintf(di->mneumonics, 128, L"%hs $%04X,Y", inst.name, addr);
+		}else if (inst.address_mode == ABX) {
+			uint8_t lo = read((uint16_t)(cursor_pc + 1));
+			uint8_t hi = read((uint16_t)(cursor_pc + 2));
+			uint16_t addr = (uint16_t)(lo | (hi << 8));
+
+			di->bytes[1] = lo;
+			di->bytes[2] = hi;
+			di->numberOfBytes = 3;
+
+			swprintf(di->mneumonics, 128, L"%hs $%04X,X", inst.name, addr);
+		}else if (inst.address_mode == ZPX) {
+			uint8_t zp = read((uint16_t)(cursor_pc + 1));
+			
+			di->bytes[1] = zp;
+			di->numberOfBytes = 2;
+
+			swprintf(di->mneumonics, 128, L"%hs $%02X,X", inst.name, zp);
+		}else if (inst.address_mode == ZPY) {
+			uint8_t zp = read((uint16_t)(cursor_pc + 1));
+
+			di->bytes[1] = zp;
+			di->numberOfBytes = 2;
+
+			swprintf(di->mneumonics, 128, L"%hs $%02X,Y", inst.name, zp);
+		}else if (inst.address_mode == IZX) {
+			uint8_t zp = read((uint16_t)(cursor_pc + 1));
+
+			di->bytes[1] = zp;
+			di->numberOfBytes = 2;
+
+			swprintf(di->mneumonics, 128, L"%hs ($%02X,X)", inst.name, zp);
+		}else if (inst.address_mode == IZY) {
+			uint8_t zp = read((uint16_t)(cursor_pc + 1));
+
+			di->bytes[1] = zp;
+			di->numberOfBytes = 2;
+
+			swprintf(di->mneumonics, 128, L"%hs ($%02X),Y", inst.name, zp);
+		}else if (inst.address_mode == IND) {
+			uint8_t lo = read((uint16_t)(cursor_pc + 1));
+			uint8_t hi = read((uint16_t)(cursor_pc + 2));
+			uint16_t addr = (uint16_t)(lo | (hi << 8));
+
+			di->bytes[1] = lo;
+			di->bytes[2] = hi;
+			di->numberOfBytes = 3;
+
+			swprintf(di->mneumonics, 128, L"%hs ($%04X)", inst.name, addr);
 		}
 		else
 		{

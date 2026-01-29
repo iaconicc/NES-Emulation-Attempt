@@ -1,0 +1,328 @@
+#include "ppu.h"
+#include "cartridge.h"
+#include "Graphics.h"
+#include "logger.h"
+#include <stdint.h>
+
+static int scanline = 0;
+static int cycles = 0;
+
+static bool frame_complete = false;
+static bool nmi = false;
+
+#define reverse_3byte_order(word) ((word&0xFF0000) >> 16) | (word&0x00FF00)  | ((word&0x0000FF) << 16)
+#define C(colour) 0xFF000000 | reverse_3byte_order(colour) & 0xFFFFFF
+
+static uint32_t colour_palette[64] = {
+C(0x626262),C(0x001C95),C(0x1904AC),C(0x42009D),C(0x61006B),C(0x6E0025),C(0x650500),C(0x491E00),C(0x223700),C(0x004900),C(0x004F00),C(0x004816),C(0x00355E),C(0x000000),C(0x000000),C(0x000000),
+C(0xABABAB),C(0x0C4EDB),C(0x3D2EFF),C(0x7115F3),C(0x9B0BB9),C(0xB01262),C(0xA92704),C(0x894600),C(0x576600),C(0x237F00),C(0x008900),C(0x008332),C(0x006D90),C(0x000000),C(0x000000),C(0x000000),
+C(0xFFFFFF),C(0x57A5FF),C(0x8287FF),C(0xB46DFF),C(0xDF60FF),C(0xF863C6),C(0xF8746D),C(0xDE9020),C(0xB3AE00),C(0x81C800),C(0x56D522),C(0x3DD36F),C(0x3EC1C8),C(0x4E4E4E),C(0x000000),C(0x000000),
+C(0xFFFFFF),C(0xBEE0FF),C(0xCDD4FF),C(0xE0CAFF),C(0xF1C4FF),C(0xFCC4EF),C(0xFDCACE),C(0xF5D4AF),C(0xE6DF9C),C(0xD3E99A),C(0xC2EFA8),C(0xB7EFC4),C(0xB6EAE5),C(0xB8B8B8),C(0x000000),C(0x000000),
+};
+
+union
+{
+	struct {
+		uint8_t nametablex : 1;
+		uint8_t nametabley : 1;
+		uint8_t vram_increment : 1;
+		uint8_t pattern_sprite : 1;
+		uint8_t pattern_background : 1;
+		uint8_t sprite_size : 1;
+		uint8_t slave_mode : 1;
+		uint8_t enable_nmi : 1;
+	};
+	uint8_t reg;
+}ctrl;
+
+union
+{
+	struct {
+		uint8_t greyscale : 1;
+		uint8_t show_background : 1;
+		uint8_t show_sprite : 1;
+		uint8_t background_rendering : 1;
+		uint8_t sprite_rendering : 1;
+		uint8_t emphasize_red : 1;
+		uint8_t emphasize_green : 1;
+		uint8_t emphasize_blue : 1;
+	};
+	uint8_t reg;
+}mask;
+
+union
+{
+	struct {
+		uint8_t unused : 5;
+		uint8_t sprite_overflow : 1;
+		uint8_t sprite_0_hit : 1;
+		uint8_t vblank : 1;
+	};
+	uint8_t reg;
+}status;
+
+typedef union {
+	struct {
+		uint16_t coarse_x : 5;
+		uint16_t coarse_y : 5;
+		uint16_t nametablex : 1;
+		uint16_t nametabley : 1;
+		uint16_t fineY : 3;
+		uint16_t unused : 1;
+	};
+	uint16_t reg;
+}Vram_reg;
+
+Vram_reg tram;
+Vram_reg vram;
+
+uint8_t fine_x;
+uint8_t write_latch;
+
+uint8_t ppu_buffer;
+
+Bus* ppu_bus;
+
+typedef struct {
+	uint8_t nametable[1024];
+}Nametable;
+
+Nametable nametables[4];
+
+uint8_t pallette_ram[32];
+
+void initialise_ppu(Bus* bus)
+{
+	ppu_bus = bus;
+}
+
+void reset_ppu()
+{
+	scanline = 0;
+	cycles = 0;
+	mask.reg = 0x00;
+	status.reg = 0x00;
+	ctrl.reg = 0x00;
+	write_latch = 0x00;
+	tram.reg = 0x0000;
+	vram.reg = 0x0000;
+
+	for (int y = 0; y < 240; y++)
+	{
+		for (int x = 0; x < 256; x++)
+		{
+			set_pixel(x,y, 0xFFFFFFFF);
+		}
+	}
+}
+
+void ppu_clock()
+{
+	//visible scanlines
+	if (scanline >= -1 && scanline < 240)
+	{
+		//skip odd pixel pixel
+		if (scanline == 0 && cycles == 0)
+		{
+			cycles = 1;
+		}
+
+		// clear vblank
+		if (scanline == -1 && cycles == 1)
+		{
+			status.vblank = 0;
+		}
+	}
+
+	// post-rendering scanlines
+	if (scanline >= 241 && scanline < 261)
+	{
+		if (scanline == 241 && cycles == 1)
+		{
+			status.vblank = 1;
+
+			if (ctrl.enable_nmi) nmi = true;
+		}
+	}
+
+	set_pixel(cycles - 1, scanline, colour_palette[rand() % 64]);
+
+	cycles++;
+	if (cycles >= 341)
+	{
+		cycles = 0;
+		scanline++;
+		if (scanline >= 261)
+		{
+			scanline = -1;
+			frame_complete = true;
+		}
+	}
+}
+
+static uint8_t ppu_read(uint16_t addr)
+{
+	return read_bus_at_address(ppu_bus,addr);
+}
+
+static void ppu_write(uint16_t addr, uint8_t data)
+{
+	write_bus_at_address(ppu_bus, addr, data);
+}
+
+static uint8_t cpu_read_ppu(uint16_t addr)
+{
+	uint8_t data = 0x00;
+
+	switch ((addr-0x2000)%8)
+	{
+	case 0: // Control
+		break;
+	case 1: // Mask
+		break;
+	case 2: // Status
+	{
+		data = status.reg;
+		write_latch = 0;
+		status.vblank = 0;
+		break;
+	}
+	case 3: // OAM Address
+		break;
+	case 4: // OAM Data
+		break;
+	case 5: // Scroll
+		break;
+	case 6: // PPU Address
+		break;
+	case 7: // PPU Data
+	{
+		data = ppu_buffer;
+		ppu_buffer = ppu_read(vram.reg);
+		if (vram.reg >= 0x3F00) data = ppu_buffer;
+		vram.reg += (ctrl.vram_increment?32:1);
+		break;
+	}
+	}
+
+	return data;
+}
+
+static void cpu_write_ppu(uint16_t addr, uint8_t data)
+{
+	switch ((addr - 0x2000) % 8)
+	{
+	case 0: // Control
+	{
+		ctrl.reg = data;
+		tram.nametablex = ctrl.nametablex;
+		tram.nametabley = ctrl.nametabley;
+		break;
+	}
+	case 1: // Mask
+		mask.reg = data;
+		break;
+	case 2: // Status
+		break;
+	case 3: // OAM Address
+		break;
+	case 4: // OAM Data
+		break;
+	case 5: // Scroll
+	{
+		if (write_latch == 0)
+		{
+			fine_x = data & 0x7;
+			tram.coarse_x = data >> 3;
+			write_latch = 1;
+		}
+		else
+		{
+			tram.fineY = data & 0x7;
+			tram.coarse_y = data >> 3;
+			write_latch = 0;
+		}
+		break;
+	}
+	case 6: // PPU Address
+		if (write_latch == 0)
+		{
+			tram.reg = (data&0x3F) << 8| (tram.reg & 0xFF);
+			write_latch = 1;
+		}
+		else
+		{
+			tram.reg = data | (tram.reg & 0xFF00);
+			vram.reg = tram.reg;
+			write_latch = 0;
+		}
+		break;
+	case 7: // PPU Data
+		ppu_write(vram.reg, data);
+		vram.reg += (ctrl.vram_increment ? 32 : 1);
+		break;
+	}
+}
+
+Bus_device ppu_device = {
+	.name = "PPU",
+	.read = cpu_read_ppu,
+	.write = cpu_write_ppu,
+	.start_range = 0x2000,
+	.end_range = 0x3FFF,
+};
+
+
+static uint8_t nametable_read(uint16_t addr)
+{
+	int nametable = (addr&0xC00)>>10;
+	return nametables[nametable].nametable[addr&0x3FF];
+}
+
+static void nametable_write(uint16_t addr, uint8_t data)
+{
+	Nt_mirroring_mode mirror_mode = current_mirroring_mode();
+
+	int nametable = (addr & 0xC00) >> 10;
+	int offset = addr & 0x3FF;
+
+	if (mirror_mode == VERTICAL)
+	{
+		if (nametable == 0 || nametable == 2)
+		{
+			nametables[0].nametable[offset] = data;
+			nametables[2].nametable[offset] = data;
+		}
+		else{
+			nametables[1].nametable[offset] = data;
+			nametables[3].nametable[offset] = data;
+		}
+	}
+	else if (mirror_mode == HORISONTAL)
+	{
+		if (nametable == 0 || nametable == 1)
+		{
+			nametables[0].nametable[offset] = data;
+			nametables[1].nametable[offset] = data;
+		}
+		else {
+			nametables[2].nametable[offset] = data;
+			nametables[3].nametable[offset] = data;
+		}
+	}
+}
+
+Bus_device nametable_device = {
+	.name = "NAMETABLE",
+	.read = nametable_read,
+	.write = nametable_write,
+	.start_range = 0x2000,
+	.end_range = 0x2FFF,
+};
+
+Bus_device* get_ppu_bus_device() { return &ppu_device; }
+Bus_device* get_nametables_device() { return &nametable_device; }
+bool is_frame_complete(){return frame_complete;	}
+void reset_frame_complete() { frame_complete = false; }
+bool ppu_nmi() { return nmi; }
+void nmi_acknolodged() { nmi = false; }

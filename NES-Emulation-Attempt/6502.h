@@ -5,6 +5,9 @@ void initialize_6502_cpu(Bus* bus);
 void reset_6502_cpu();
 void cpu_6502_clock();
 int get_cycles();
+void set_cycles(int cycle);
+
+void nmi();
 
 typedef struct 
 {

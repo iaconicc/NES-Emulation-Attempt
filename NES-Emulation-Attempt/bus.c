@@ -13,15 +13,18 @@ typedef struct {
 }Device_registry;
 
 struct Bus {
+	char* name;
 	Device_registry registry;
 	bool islocked;
 };
 
 Bus bus_6502 = {
+	.name = "6502",
 	.islocked = false,
 };
 
 Bus bus_ppu = {
+	.name = "ppu",
 	.islocked = false,
 };
 
@@ -125,7 +128,7 @@ int lock_device_registry(Bus* bus)
 	//log the devices and their regions
 	for(int i = 0; i < bus->registry.count; i++) {
 		Bus_device* device = &bus->registry.bus_device_array_List[i];
-		log_info("Bus Device %s Registered: 0x%04X-0x%04X", device->name, device->start_range, device->end_range);
+		log_info("Bus Device %s Registered: 0x%04X-0x%04X on %s bus", device->name, device->start_range, device->end_range, bus->name);
 	}
 		
 	//lock the registry
@@ -159,17 +162,19 @@ static int find_bus_device_by_address(const Bus* bus,const uint16_t addr)
 
 uint8_t read_bus_at_address(const Bus* bus, const uint16_t addr)
 {
-	if (!bus || !bus->islocked) return 0xFF;
-
+	if (!bus || !bus->islocked) {
+		log_warn("attempted to read to locked or non-existant bus");
+		return 0xFF;
+	}
 	int idx = find_bus_device_by_address(bus, addr);
 	if (idx < 0) {
-		log_warn("Attempted read at address 0x%04x but there is no device defaulted to 0xFF", addr);
+		log_warn("Attempted read at address 0x%04x on %s bus, but there is no device defaulted to 0xFF", addr, bus->name);
 		return 0xFF;
 	}
 
 	const Bus_device* device = &bus->registry.bus_device_array_List[idx];
 	if (!device->read) {
-		log_warn("Attempted read at address 0x%04x but device has no response defaulted to 0xFF", addr);
+		log_warn("Attempted read at address 0x%04x on %s bus, but device has no response defaulted to 0xFF", addr, bus->name);
 		return 0xFF;
 	}
 
@@ -179,18 +184,22 @@ uint8_t read_bus_at_address(const Bus* bus, const uint16_t addr)
 
 void write_bus_at_address(const Bus* bus, const uint16_t addr, const uint8_t data)
 {
-	if (!bus || !bus->islocked) return;
+	if (!bus || !bus->islocked) 
+	{
+		log_warn("attempted to write to locked or non-existant bus");
+		return;
+	}
 
 	int idx = find_bus_device_by_address(bus, addr);
 	if (idx < 0) {
-		log_warn("Attempted write at address 0x%04x but there is no device", addr);
+		log_warn("Attempted write at address 0x%04x on %s bus, but there is no device", addr, bus->name);
 		return;
 	}
 
 	const Bus_device* device = &bus->registry.bus_device_array_List[idx];
 	if (!device->write)
 	{
-		log_warn("Attempted write at address 0x%04x but device has no response", addr);
+		log_warn("Attempted write at address 0x%04x on %s bus, but device has no response", addr, bus->name);
 		return;
 	}
 
