@@ -268,8 +268,11 @@ void ppu_clock()
 			case 2:
 			{
 				//read attribute byte
-				next_tile_attribute = ppu_read(0x23C0 | (vram.nametablex) << 10 | (vram.nametabley) << 11 |
-					vram.coarse_x >> 2 | (vram.coarse_y >> 2) << 3);
+				next_tile_attribute = ppu_read(0x23C0 | 
+					((vram.nametablex) << 10) |
+					((vram.nametabley) << 11) |
+					(vram.coarse_x >> 2 )|
+					((vram.coarse_y >> 2) << 3));
 				if (vram.coarse_y & 0x02) next_tile_attribute >>= 4;
 				if (vram.coarse_x & 0x02) next_tile_attribute >>= 2;
 				next_tile_attribute &= 0x03;
@@ -283,7 +286,7 @@ void ppu_clock()
 				break;
 			}
 			case 6:
-				next_tile_chr_lsb = ppu_read(ctrl.pattern_background << 12 +
+				next_tile_chr_msb = ppu_read(ctrl.pattern_background << 12 +
 					((uint16_t)next_tile_id << 4) +
 					(vram.fineY) + 8);
 				break;
@@ -516,12 +519,12 @@ Bus_device nametable_device = {
 
 static uint8_t palette_read(uint16_t addr)
 {
-	return palette_ram[(addr - 0x3F00) & 0x20];
+	return palette_ram[(addr - 0x3F00) & 0x1F];
 }
 
 static void palette_write(uint16_t addr, uint8_t data)
 {
-	palette_ram[(addr - 0x3F00) & 0x3F] = data;
+	palette_ram[(addr - 0x3F00) & 0x1F] = data;
 }
 
 Bus_device palette_ram_device = {

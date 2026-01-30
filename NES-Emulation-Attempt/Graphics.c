@@ -107,13 +107,12 @@ int create_graphics_for_window(HWND hwnd)
 	}Vert;
 
 	Vert quad[] = {
-		{-1.0f,-1.0f, 1.0f, 1.0f},
-		{-1.0f, 1.0f, 1.0f, 0.0f},
-		{ 1.0f,-1.0f, 0.0f, 1.0f},
-
-		{ 1.0f,-1.0f, 0.0f, 1.0f},
-		{-1.0f, 1.0f, 1.0f, 0.0f},
-		{ 1.0f, 1.0f, 0.0f, 0.0f},
+		{-1.0f,  1.0f,0.0f, 0.0f}, // Top-Left
+		{ 1.0f,  1.0f,1.0f, 0.0f}, // Top-Right
+		{-1.0f, -1.0f,0.0f, 1.0f}, // Bottom-Left
+		{ 1.0f, -1.0f,1.0f, 1.0f}, // Bottom-Right
+		{-1.0f, -1.0f,0.0f, 1.0f}, // Bottom-Left
+		{ 1.0f,  1.0f,1.0f, 0.0f}, // Top-Right
 	};
 
 	D3D11_BUFFER_DESC bd = {
