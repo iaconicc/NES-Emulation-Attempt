@@ -59,7 +59,7 @@ union
 		uint8_t vblank : 1;
 	};
 	uint8_t reg;
-}status;
+}ppu_status;
 
 typedef union {
 	struct {
@@ -89,7 +89,19 @@ typedef struct {
 
 Nametable nametables[4];
 
-uint8_t pallette_ram[32];
+uint8_t palette_ram[32];
+
+uint8_t next_tile_id = 0;
+uint8_t next_tile_attribute = 0;
+
+uint8_t next_tile_chr_lsb = 0;
+uint8_t next_tile_chr_msb = 0;
+
+//shift registers
+uint16_t shifter_pattern_lo = 0x0000;
+uint16_t shifter_pattern_hi = 0x0000;
+uint16_t shifter_attrib_lo = 0x0000;
+uint16_t shifter_attrib_hi = 0x0000;
 
 void initialise_ppu(Bus* bus)
 {
@@ -101,11 +113,19 @@ void reset_ppu()
 	scanline = 0;
 	cycles = 0;
 	mask.reg = 0x00;
-	status.reg = 0x00;
+	ppu_status.reg = 0x00;
 	ctrl.reg = 0x00;
 	write_latch = 0x00;
 	tram.reg = 0x0000;
 	vram.reg = 0x0000;
+	next_tile_id = 0;
+	next_tile_attribute = 0;
+	next_tile_chr_lsb = 0;
+	next_tile_chr_msb = 0;
+	shifter_pattern_lo = 0x0000;
+	shifter_pattern_hi = 0x0000;
+	shifter_attrib_lo = 0x0000;
+	shifter_attrib_hi = 0x0000;
 
 	for (int y = 0; y < 240; y++)
 	{
@@ -114,6 +134,104 @@ void reset_ppu()
 			set_pixel(x,y, 0xFFFFFFFF);
 		}
 	}
+}
+
+static void incrementScrollX()
+{
+	if (mask.background_rendering || mask.sprite_rendering)
+	{
+		if (vram.coarse_x == 31)
+		{
+			vram.coarse_x = 0;
+			vram.nametablex = ~vram.nametablex;
+		}
+		else
+		{
+			vram.coarse_x++;
+		}
+	}
+}
+
+static void incrementScrollY()
+{
+	if (mask.background_rendering || mask.sprite_rendering)
+	{
+		if (vram.fineY < 7)
+		{
+			vram.fineY++;
+		}
+		else
+		{
+			vram.fineY = 0;
+
+			if (vram.coarse_y == 29)
+			{
+				vram.coarse_y = 0;
+				vram.nametabley = ~vram.nametabley;
+			}
+			else if (vram.coarse_y == 31)
+			{
+				vram.coarse_y = 0;
+			}
+			else
+			{
+				vram.coarse_y++;
+			}
+		}
+	}
+}
+
+static void TransferAddressX()
+{
+	if (mask.background_rendering || mask.sprite_rendering)
+	{
+		vram.nametablex = tram.nametablex;
+		vram.coarse_x = tram.coarse_x;
+	}
+}
+
+static void TransferAddressY()
+{
+
+	if (mask.background_rendering || mask.sprite_rendering)
+	{
+		vram.fineY = tram.fineY;
+		vram.nametabley = tram.nametabley;
+		vram.coarse_y = tram.coarse_y;
+	}
+}
+
+static void LoadBackgroundShifters()
+{
+	shifter_pattern_lo = (shifter_pattern_lo & 0xFF00) | next_tile_chr_lsb;
+	shifter_pattern_hi = (shifter_pattern_hi & 0xFF00) | next_tile_chr_msb;
+
+	shifter_attrib_lo = (shifter_attrib_lo & 0xFF00) | ((next_tile_attribute & 0b01) ? 0xFF : 0x00);
+	shifter_attrib_hi = (shifter_attrib_hi & 0xFF00) | ((next_tile_attribute & 0b10) ? 0xFF : 0x00);
+}
+
+static void UpdateShifters()
+{
+	if (mask.background_rendering)
+	{
+		// Shifting background tile pattern row
+		shifter_pattern_lo <<= 1;
+		shifter_pattern_hi <<= 1;
+
+		// Shifting palette attributes by 1
+		shifter_attrib_lo <<= 1;
+		shifter_attrib_hi <<= 1;
+	}
+}
+
+static uint8_t ppu_read(uint16_t addr)
+{
+	return read_bus_at_address(ppu_bus, addr);
+}
+
+static void ppu_write(uint16_t addr, uint8_t data)
+{
+	write_bus_at_address(ppu_bus, addr, data);
 }
 
 void ppu_clock()
@@ -130,7 +248,70 @@ void ppu_clock()
 		// clear vblank
 		if (scanline == -1 && cycles == 1)
 		{
-			status.vblank = 0;
+			ppu_status.vblank = 0;
+		}
+
+		if ((cycles >= 2 && cycles < 258) || (cycles >= 321 && cycles < 338))
+		{
+			UpdateShifters();
+
+			switch ((cycles - 1) % 8)
+			{
+			case 0:
+			{
+				LoadBackgroundShifters();
+
+				//read next tile id
+				next_tile_id = ppu_read(0x2000 | (vram.reg & 0x0FFF));
+				break;
+			}
+			case 2:
+			{
+				//read attribute byte
+				next_tile_attribute = ppu_read(0x23C0 | (vram.nametablex) << 10 | (vram.nametabley) << 11 |
+					vram.coarse_x >> 2 | (vram.coarse_y >> 2) << 3);
+				if (vram.coarse_y & 0x02) next_tile_attribute >>= 4;
+				if (vram.coarse_x & 0x02) next_tile_attribute >>= 2;
+				next_tile_attribute &= 0x03;
+				break;
+			}
+			case 4:
+			{
+				next_tile_chr_lsb = ppu_read((ctrl.pattern_background << 12) 
+					+((uint16_t)next_tile_id << 4) 
+					+(vram.fineY) + 0);
+				break;
+			}
+			case 6:
+				next_tile_chr_lsb = ppu_read(ctrl.pattern_background << 12 +
+					((uint16_t)next_tile_id << 4) +
+					(vram.fineY) + 8);
+				break;
+			case 7:
+				incrementScrollX();
+				break;
+			}
+
+			if (cycles == 256)
+			{
+				incrementScrollY();
+			}
+
+			if (cycles == 257)
+			{
+				LoadBackgroundShifters();
+				TransferAddressX();
+			}
+
+			if (cycles == 338 || cycles == 340)
+			{
+				next_tile_id = ppu_read(0x2000 | (vram.reg & 0x0FFF));
+			}
+
+			if (scanline == -1 && cycles >= 280 && cycles < 305)
+			{
+				TransferAddressY();
+			}
 		}
 	}
 
@@ -139,14 +320,37 @@ void ppu_clock()
 	{
 		if (scanline == 241 && cycles == 1)
 		{
-			status.vblank = 1;
+			ppu_status.vblank = 1;
 
 			if (ctrl.enable_nmi) nmi = true;
 		}
 	}
 
-	set_pixel(cycles - 1, scanline, colour_palette[rand() % 64]);
+	uint8_t bg_pixel = 0x00;
+	uint8_t bg_palette = 0x00;
+	uint8_t colour = 0x00;
 
+	//composition
+	if (mask.background_rendering)
+	{
+		uint16_t bit_mask = 0x8000 >> fine_x;
+
+		uint8_t p0_pixel = (shifter_pattern_lo & bit_mask) > 0;
+		uint8_t p1_pixel = (shifter_pattern_hi & bit_mask) > 0;
+
+		bg_pixel = (p1_pixel << 1) | p0_pixel;
+
+		uint8_t bg_pal0 = (shifter_attrib_lo & bit_mask) > 0;
+		uint8_t bg_pal1 = (shifter_attrib_hi & bit_mask) > 0;
+
+		bg_palette = (bg_pal1 << 1) | bg_pal0;
+
+		colour = palette_ram[((bg_palette << 2) + bg_pixel)&0x3F];
+	}
+
+	set_pixel(cycles - 1, scanline, colour_palette[colour]);
+
+	//increment the cycle
 	cycles++;
 	if (cycles >= 341)
 	{
@@ -158,16 +362,6 @@ void ppu_clock()
 			frame_complete = true;
 		}
 	}
-}
-
-static uint8_t ppu_read(uint16_t addr)
-{
-	return read_bus_at_address(ppu_bus,addr);
-}
-
-static void ppu_write(uint16_t addr, uint8_t data)
-{
-	write_bus_at_address(ppu_bus, addr, data);
 }
 
 static uint8_t cpu_read_ppu(uint16_t addr)
@@ -182,9 +376,9 @@ static uint8_t cpu_read_ppu(uint16_t addr)
 		break;
 	case 2: // Status
 	{
-		data = status.reg;
+		data = ppu_status.reg;
 		write_latch = 0;
-		status.vblank = 0;
+		ppu_status.vblank = 0;
 		break;
 	}
 	case 3: // OAM Address
@@ -320,9 +514,38 @@ Bus_device nametable_device = {
 	.end_range = 0x2FFF,
 };
 
+static uint8_t palette_read(uint16_t addr)
+{
+	return palette_ram[(addr - 0x3F00) & 0x20];
+}
+
+static void palette_write(uint16_t addr, uint8_t data)
+{
+	palette_ram[(addr - 0x3F00) & 0x3F] = data;
+}
+
+Bus_device palette_ram_device = {
+	.name = "PALETTE_RAM",
+	.read = palette_read,
+	.write = palette_write,
+	.start_range = 0x3F00,
+	.end_range = 0x3FFF,
+};
+
 Bus_device* get_ppu_bus_device() { return &ppu_device; }
 Bus_device* get_nametables_device() { return &nametable_device; }
+Bus_device* get_palette_ram_device() { return &palette_ram_device; }
+uint8_t* get_nametable_buffer(int nametable) { return &nametables[nametable]; }
 bool is_frame_complete(){return frame_complete;	}
 void reset_frame_complete() { frame_complete = false; }
 bool ppu_nmi() { return nmi; }
 void nmi_acknolodged() { nmi = false; }
+
+Ppu_Regs ppu_get_regs()
+{
+	Ppu_Regs r;
+	r.vram = vram.reg;
+	r.tram = tram.reg;
+	r.ctrl = ctrl.reg; r.mask = mask.reg; r.status = ppu_status.reg;
+	return r;
+}

@@ -229,7 +229,7 @@ void update_window_graphics()
 
 void set_pixel(int x, int y, UINT32 colour)
 {
-	if ( x >= 0 && y >= 0 && x <= 256 && y <= 240)
+	if ( x >= 0 && y >= 0 && x < 256 && y < 240)
 	{
 		framebuffer[y][x] = 0xFF000000 | (colour & 0xFFFFFF);
 	}

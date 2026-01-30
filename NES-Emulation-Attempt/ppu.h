@@ -12,3 +12,12 @@ bool is_frame_complete();
 
 Bus_device* get_ppu_bus_device();
 Bus_device* get_nametables_device();
+Bus_device* get_palette_ram_device();
+
+uint8_t* get_nametable_buffer(int nametable);
+typedef struct {
+	uint16_t vram, tram;
+	uint8_t  ctrl, mask, status;
+}Ppu_Regs;
+
+Ppu_Regs ppu_get_regs();

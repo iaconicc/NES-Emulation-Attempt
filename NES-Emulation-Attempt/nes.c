@@ -32,7 +32,7 @@ int initialise_nes()
 	}
 
 	if (lock_device_registry(ppu_bus) == -1) return -1;
-	initialise_ppu(ppu_bus);
+	initialise_ppu(ppu_bus);	
 
 	return 0;
 }
@@ -74,13 +74,7 @@ void nes_clock(){
 	ppu_clock();
 	if (SystemCounter % 3 == 0)
 	{
-		int cycles = get_cycles();
-		if ( cycles == 0)
-		{
-			cpu_6502_clock();
-		}
-		cycles--;
-		set_cycles(cycles);
+		cpu_6502_clock();
 	}
 
 	if (ppu_nmi())

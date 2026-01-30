@@ -11,7 +11,7 @@ uint8_t a = 0x00;    // Accumulator
 uint8_t x = 0x00;    // X Register
 uint8_t y = 0x00;    // Y Register
 
-uint8_t status = 0x00; // Status Register
+uint8_t cpu_status = 0x00; // Status Register
 
 // Assisstive variables to facilitate emulation
 uint8_t  fetched = 0x00;   // Represents the working input value to the ALU
@@ -41,13 +41,13 @@ void initialize_6502_cpu(Bus* bus) {
 // flag manipulation functions
 static void set_flag(StatusFlags flag, uint8_t value) {
 	if (value)
-		status |= flag;
+		cpu_status |= flag;
 	else
-		status &= ~flag;
+		cpu_status &= ~flag;
 }
 
 static uint8_t get_flag(StatusFlags flag) {
-	return (status & flag) > 0 ? 1 : 0;
+	return (cpu_status & flag) > 0 ? 1 : 0;
 }
 
 static uint8_t read(uint16_t addr) {
@@ -131,17 +131,22 @@ Instruction lookup[16][16] = {
 
 void cpu_6502_clock(){
 	
-	opcode = read(pc);
-	pc++;
+	if (cycles == 0)
+	{
+		opcode = read(pc);
+		pc++;
 
-	cycles = lookup[opcode & 0xF][opcode >> 4 & 0xF].cycles;
+		cycles = lookup[opcode & 0xF][opcode >> 4 & 0xF].cycles;
 
-	uint8_t additional_cycle1 = lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode();
-	uint8_t additional_cycle2 = lookup[opcode >> 4 & 0xF][opcode & 0xF].operate();
+		uint8_t additional_cycle1 = lookup[opcode >> 4 & 0xF][opcode & 0xF].address_mode();
+		uint8_t additional_cycle2 = lookup[opcode >> 4 & 0xF][opcode & 0xF].operate();
 
-	cycles += (additional_cycle1 & additional_cycle2);
+		cycles += (additional_cycle1 & additional_cycle2);
 
-	clock_count++;
+		clock_count++;
+	}
+
+	cycles--;
 }
 
 int get_cycles()
@@ -171,7 +176,7 @@ void nmi()
 	set_flag(BREAK, 0);
 	set_flag(UNUSED, 1);
 	set_flag(INTERRUPT_DISABLE, 1);
-	write(0x0100 + sp, status);
+	write(0x0100 + sp, cpu_status);
 	sp--;
 
 	addr_abs = 0xFFFA;
@@ -619,6 +624,8 @@ static uint8_t JMP()
 
 static uint8_t JSR()
 {
+	pc--;
+
 	write(0x100+sp, (uint8_t) ((pc & 0xFF00) >> 8) & 0xFF);
 	sp--;
 	write(0x100 + sp, (uint8_t)pc & 0xFF);
@@ -689,7 +696,7 @@ static uint8_t PHA()
 
 static uint8_t PHP()
 {
-	write(0x100 + sp, status|BREAK|UNUSED);
+	write(0x100 + sp, cpu_status|BREAK|UNUSED);
 	set_flag(BREAK, 0);
 	set_flag(UNUSED, 0);
 	sp--;
@@ -708,7 +715,7 @@ static uint8_t PLA()
 static uint8_t PLP()
 {
 	sp++;
-	status = read(0x100 + sp);
+	cpu_status = read(0x100 + sp);
 	set_flag(UNUSED, 1);
 	return 0;
 }
@@ -744,7 +751,7 @@ uint8_t static ROR()
 uint8_t static RTI()
 {
 	sp++;
-	status = read(0x100+sp);
+	cpu_status = read(0x100+sp);
 	sp++;
 
 	set_flag(BREAK, 0);
@@ -877,7 +884,7 @@ static uint8_t BRK() {
 	sp--;
 
 	set_flag(BREAK, 1);
-	write(0x0100 + sp, status);
+	write(0x0100 + sp, cpu_status);
 	sp--;
 	set_flag(BREAK, 0);
 
@@ -1037,6 +1044,6 @@ Cpu6502_Regs cpu6502_get_regs(void)
 {
 	Cpu6502_Regs r;
 	r.pc = pc;
-	r.a = a; r.x = x; r.y = y; r.sp = sp; r.status = status;
+	r.a = a; r.x = x; r.y = y; r.sp = sp; r.status = cpu_status;
 	return r;
 }

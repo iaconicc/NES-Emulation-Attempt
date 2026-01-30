@@ -26,4 +26,4 @@ typedef struct {
 	uint8_t  a, x, y, sp, status;
 } Cpu6502_Regs;
 
-Cpu6502_Regs cpu6502_get_regs(void);
+Cpu6502_Regs cpu6502_get_regs();

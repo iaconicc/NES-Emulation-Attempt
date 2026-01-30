@@ -164,18 +164,18 @@ uint8_t read_bus_at_address(const Bus* bus, const uint16_t addr)
 {
 	if (!bus || !bus->islocked) {
 		log_warn("attempted to read to locked or non-existant bus");
-		return 0xFF;
+		return 0x00;
 	}
 	int idx = find_bus_device_by_address(bus, addr);
 	if (idx < 0) {
-		log_warn("Attempted read at address 0x%04x on %s bus, but there is no device defaulted to 0xFF", addr, bus->name);
-		return 0xFF;
+		log_warn("Attempted read at address 0x%04x on %s bus, but there is no device defaulted to 0x00", addr, bus->name);
+		return 0x00;
 	}
 
 	const Bus_device* device = &bus->registry.bus_device_array_List[idx];
 	if (!device->read) {
-		log_warn("Attempted read at address 0x%04x on %s bus, but device has no response defaulted to 0xFF", addr, bus->name);
-		return 0xFF;
+		log_warn("Attempted read at address 0x%04x on %s bus, but device has no response defaulted to 0x00", addr, bus->name);
+		return 0x00;
 	}
 
 	return device->read(addr);

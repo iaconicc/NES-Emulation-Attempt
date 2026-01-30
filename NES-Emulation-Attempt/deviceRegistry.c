@@ -5,7 +5,7 @@
 
 // Initialize the array with a constant size and assign the pointer later  
 Bus_device** cpu_bus_devices[3];
-Bus_device** ppu_bus_devices[2];
+Bus_device** ppu_bus_devices[3];
 
 Bus_device** get_cpu_device_registry(int* count)  
 {  
@@ -23,10 +23,12 @@ Bus_device** get_ppu_device_registry(int* count)
 {
     ppu_bus_devices[0] = get_ppu_cartridge_device();
     ppu_bus_devices[1] = get_nametables_device();
+    ppu_bus_devices[2] = get_palette_ram_device();
 
     if (count)
     {
         *count = sizeof(ppu_bus_devices)/sizeof(Bus_device*);
     }
+
     return ppu_bus_devices;
 }

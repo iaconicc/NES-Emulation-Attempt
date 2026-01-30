@@ -52,6 +52,16 @@ static HFONT g_fontUI = NULL;
 #define ID_STATUS        42005
 /*################################*/
 
+typedef enum Memory_view_type {
+    RAM = ID_RAM,
+    Nametable0 = ID_NAMETABLE0,
+    Nametable1 = ID_NAMETABLE1,
+    Nametable2 = ID_NAMETABLE2,
+    Nametable3 = ID_NAMETABLE3,
+}Memory_view_type;
+
+Memory_view_type memory_view_type;
+
 static HFONT create_mono_font(int pt)
 {
     HDC hdc = GetDC(NULL);
@@ -199,8 +209,56 @@ static void lv_set_cell(HWND lv, int row, int col, const wchar_t* txt)
     ListView_SetItemText(lv, row, col, (LPWSTR)txt);
 }
 
-static void lv_populate_ram() 
+static void lv_populate_nametable(int nametable)
 {
+    int nametable_base = (0x2000 | (nametable << 10));
+
+    lv_clear(g_lvMem);
+    for (int i = 0; i < 64; i++) {
+        wchar_t t[8];
+        swprintf(t, 8, L"%04X", nametable_base + (i * 16));
+        lv_add_row(g_lvMem, i, t);
+    }
+
+    uint8_t* nametable_ptr= get_nametable_buffer(nametable);
+
+    for (int row = 0; row < 64; row++)
+    {
+        char ascii[17];
+        memcpy(ascii, nametable_ptr + row * 16, 16);
+        ascii[16] = '\0';
+
+        for (int i = 0; i < 16; i++) {
+            if (ascii[i] < 32 || ascii[i] > 126)
+                ascii[i] = '.';
+        }
+
+        //its annoying to have to convert to wide char but thats Microsoft for forcing wide char windows on me (ascii windows don't work anymore :( )
+        wchar_t wascii[32];
+        swprintf(wascii, sizeof(wascii) / 2, L"%hs", ascii);
+        lv_set_cell(g_lvMem, row, 17, wascii);
+
+        for (int column = 1; column <= 16; column++)
+        {
+            wchar_t temp[8];
+            swprintf(temp, sizeof(temp) / 2, L"%02X", nametable_ptr[(row * 16) + (column - 1)]);
+            lv_set_cell(g_lvMem, row, column, temp);
+        }
+    }
+
+}
+
+static void lv_populate_ram()
+{
+
+    lv_clear(g_lvMem);
+
+    for (int i = 0; i < 128; i++) {
+        wchar_t t[8];
+        swprintf(t, 8, L"%04X", i * 16);
+        lv_add_row(g_lvMem, i, t);
+    }
+
     uint8_t* ram = get_ram_buffer();
 
     for (int row = 0; row < 128; row++)
@@ -298,7 +356,7 @@ static void lv_populate_disassembly(void)
     currentDisassembledIndex++;
 }
 
-#define REG_COUNT 6
+#define REG_COUNT 11
 
 static uint32_t prev_regs[REG_COUNT] = { 0 };
 static BOOL reg_changed[REG_COUNT] = { 0 };
@@ -307,6 +365,7 @@ static BOOL regs_first = TRUE;
 static void lv_populate_registers() 
 {
     Cpu6502_Regs r = cpu6502_get_regs();
+    Ppu_Regs ppu_r = ppu_get_regs();
     
     uint32_t cur[REG_COUNT] = {
         r.pc,
@@ -314,7 +373,12 @@ static void lv_populate_registers()
         r.a,
         r.x,
         r.y,
-        r.status
+        r.status,
+        ppu_r.ctrl,
+        ppu_r.mask,
+        ppu_r.status,
+        ppu_r.tram,
+        ppu_r.vram,
     };
 
     for (int i = 0; i < REG_COUNT; i++)
@@ -328,7 +392,7 @@ static void lv_populate_registers()
     }
     regs_first = FALSE;
 
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < REG_COUNT; i++)
     {
         wchar_t register_hex_Value[8];
         wchar_t register_decimal_value[16];
@@ -358,6 +422,26 @@ static void lv_populate_registers()
             swprintf(register_hex_Value, 8, L"%02X", r.status);
             swprintf(register_decimal_value, 8, L"%u", r.status);
             break;
+        case 6:
+            swprintf(register_hex_Value, 8, L"%02X", ppu_r.ctrl);
+            swprintf(register_decimal_value, 8, L"%u", ppu_r.ctrl);
+            break;
+        case 7:
+            swprintf(register_hex_Value, 8, L"%02X", ppu_r.mask);
+            swprintf(register_decimal_value, 8, L"%u", ppu_r.mask);
+            break;
+        case 8:
+            swprintf(register_hex_Value, 8, L"%02X", ppu_r.status);
+            swprintf(register_decimal_value, 8, L"%u", ppu_r.status);
+            break;
+        case 9:
+            swprintf(register_hex_Value, 8, L"%04X", ppu_r.tram);
+            swprintf(register_decimal_value, 8, L"%u", ppu_r.tram);
+            break;
+        case 10:
+            swprintf(register_hex_Value, 8, L"%04X", ppu_r.vram);
+            swprintf(register_decimal_value, 8, L"%u", ppu_r.vram);
+            break;
         }
 
         lv_set_cell(g_lvRegs, i, 1, register_hex_Value);
@@ -369,9 +453,30 @@ static void lv_populate_registers()
 
 static void refresh_view()
 {
-    lv_populate_ram();
     lv_populate_disassembly();
     lv_populate_registers();
+
+    switch (memory_view_type)
+    {
+    case RAM:
+        lv_populate_ram();
+        break;
+    case Nametable0:
+        lv_populate_nametable(0);
+        break;
+    case Nametable1:
+        lv_populate_nametable(1);
+        break;
+    case Nametable2:
+        lv_populate_nametable(2);
+        break;
+    case Nametable3:
+        lv_populate_nametable(3);
+        break;
+    default:
+        break;
+    }
+
 }
 
 // -------------------- Creation --------------------
@@ -460,6 +565,13 @@ static void create_controls(HWND hwnd)
     lv_add_row(g_lvRegs, 4, L"Y");
     lv_add_row(g_lvRegs, 5, L"Status");
 
+    lv_add_row(g_lvRegs, 6, L"CTRL");
+    lv_add_row(g_lvRegs, 7, L"MASK");
+    lv_add_row(g_lvRegs, 8, L"STATUS");
+    lv_add_row(g_lvRegs, 9, L"TRAM");
+    lv_add_row(g_lvRegs, 10, L"VRAM");
+
+
     //memory rows
     for (int i = 0; i < 128; i++) {
         wchar_t t[8];
@@ -474,6 +586,7 @@ static void create_controls(HWND hwnd)
     }
 
     // Initial content
+    memory_view_type = RAM;
     refresh_view();
 
     layout_controls(hwnd);
@@ -509,16 +622,6 @@ static void clearChecks()
     CheckMenuItem(g_hview, ID_NAMETABLE2, MF_BYCOMMAND | MF_UNCHECKED);
     CheckMenuItem(g_hview, ID_NAMETABLE3, MF_BYCOMMAND | MF_UNCHECKED);
 }
-
-typedef enum {
-    RAM = ID_RAM,
-    Nametable0 = ID_NAMETABLE0,
-    Nametable1 = ID_NAMETABLE1,
-    Nametable2 = ID_NAMETABLE2,
-    Nametable3 = ID_NAMETABLE3,
-}Memory_view_type;
-
-Memory_view_type memory_view_type;
 
 bool CtrlPressed = false;
 static LRESULT nes_dbg_proc(HANDLE hwnd,UINT msg,WPARAM wparam, LPARAM lparam)
@@ -598,6 +701,7 @@ static LRESULT nes_dbg_proc(HANDLE hwnd,UINT msg,WPARAM wparam, LPARAM lparam)
             clearChecks();
             CheckMenuItem(g_hview, LOWORD(wparam), MF_BYCOMMAND | MF_CHECKED);
             memory_view_type = LOWORD(wparam);
+            refresh_view();
             break;
         }
         }
@@ -636,10 +740,10 @@ static HMENU create_menu_bar(void)
     AppendMenu(hEmulation, MF_STRING, ID_RESET, L"&Reset Emulation\tCtrl+1");
 
     AppendMenu(g_hview, MF_STRING, ID_RAM, L"&Ram");
-    AppendMenu(g_hview, MF_STRING, ID_NAMETABLE0, L"&Nametable0");
-    AppendMenu(g_hview, MF_STRING, ID_NAMETABLE1, L"&Nametable1");
-    AppendMenu(g_hview, MF_STRING, ID_NAMETABLE2, L"&Nametable2");
-    AppendMenu(g_hview, MF_STRING, ID_NAMETABLE3, L"&Nametable3");
+    AppendMenu(g_hview, MF_STRING, ID_NAMETABLE0, L"&Pyhsical Nametable 0");
+    AppendMenu(g_hview, MF_STRING, ID_NAMETABLE1, L"&Pyhsical Nametable 1");
+    AppendMenu(g_hview, MF_STRING, ID_NAMETABLE2, L"&Logical Nametable 0");
+    AppendMenu(g_hview, MF_STRING, ID_NAMETABLE3, L"&Logical Nametable 1");
 
     memory_view_type = RAM;
     CheckMenuItem(g_hview, ID_RAM, MF_BYCOMMAND | MF_CHECKED);
@@ -756,6 +860,17 @@ bool create_windows()
     fps_init();
 
 	return true;
+}
+
+void send_break()
+{
+    if (is_emulator_running())
+    {
+        set_emulator_running(false);
+        SetWindowTextW(g_btnRun, L"Continue [C]");
+        SendMessageW(g_status, SB_SETTEXTW, 0, (LPARAM)L"Stopped");
+        refresh_view();
+    }
 }
 
 static void fps_on_frame()

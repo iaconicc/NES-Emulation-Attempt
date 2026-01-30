@@ -1,6 +1,7 @@
 #include "app.h"
 #include "nes.h"
 #include "ppu.h"
+#include "6502.h"
 #include "cartridge.h"
 #include "window.h"
 #include "logger.h"
@@ -20,7 +21,7 @@ bool initialise_app(char* file)
 		return false;
 	}
 
-	if(insert_cartridge(file) == -1) return false;
+	if (insert_cartridge(file) == -1) return false;
 	reset_nes();
 
 	//create windows
@@ -36,6 +37,8 @@ void deinitialise_app()
 	log_deinialise();
 }
 
+static uint16_t breakpoint = 0xC016;
+//static uint16_t breakpoint = 0xC5AF;
 static void run_frame()
 {
 	if (is_emulator_running())
@@ -43,6 +46,11 @@ static void run_frame()
 		while (!is_frame_complete())
 		{
 			nes_clock();
+			if (cpu6502_get_regs().pc == breakpoint)
+			{
+				send_break();
+				break;
+			}
 		}
 	}
 }
